@@ -1,0 +1,95 @@
+"""命令列入口。
+
+    python -m tw_etl daily                  # 公司、行情、估值 → 快照
+    python -m tw_etl monthly                # 最新月營收 → 快照
+    python -m tw_etl quarterly [--years 2025 2026]
+    python -m tw_etl dividends [--years 2025 2026]   # 董事會決議年度
+    python -m tw_etl snapshot               # 只重算快照
+    python -m tw_etl backfill --from-year 2023 --revenue-months 36 --dividend-years 10
+    python -m tw_etl verify-margins         # 與官方「營益分析」交叉比對
+
+所有指令都支援 --dry-run（抓取與計算，但不寫入資料庫）與 -v，放在子指令之後，例如 `daily --dry-run`。
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+
+from .config import Settings
+from .http import Fetcher
+from .jobs import Context, run_backfill, run_daily, run_dividends, run_monthly, run_quarterly, run_snapshot
+from .load.supabase import Supabase
+from .verify import verify_margins
+
+BACKFILL_STEPS = ("daily", "quarterly", "revenue", "dividend")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--dry-run", action="store_true", help="只抓取與計算，不寫入資料庫")
+    common.add_argument("-v", "--verbose", action="store_true")
+
+    p = argparse.ArgumentParser(prog="tw_etl", description="台股選股平台 ETL")
+    sub = p.add_subparsers(dest="command", required=True)
+    sub.add_parser("daily", parents=[common])
+    sub.add_parser("monthly", parents=[common])
+    q = sub.add_parser("quarterly", parents=[common])
+    q.add_argument("--years", type=int, nargs="+")
+    d = sub.add_parser("dividends", parents=[common])
+    d.add_argument("--years", type=int, nargs="+", help="董事會決議年度（西元）")
+    sub.add_parser("snapshot", parents=[common])
+    b = sub.add_parser("backfill", parents=[common])
+    b.add_argument("--from-year", type=int, default=2023)
+    b.add_argument("--revenue-months", type=int, default=36)
+    b.add_argument("--dividend-years", type=int, default=10)
+    b.add_argument("--steps", nargs="+", choices=BACKFILL_STEPS, default=list(BACKFILL_STEPS))
+    sub.add_parser("verify-margins", parents=[common])
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    settings = Settings.from_env()
+    db = Supabase(settings.supabase_url, settings.service_key)
+    with Fetcher() as fetcher:
+        ctx = Context(db=db, fetcher=fetcher, settings=settings, dry_run=args.dry_run)
+        try:
+            match args.command:
+                case "daily":
+                    run_daily(ctx)
+                case "monthly":
+                    run_monthly(ctx)
+                case "quarterly":
+                    run_quarterly(ctx, args.years)
+                case "dividends":
+                    run_dividends(ctx, args.years)
+                case "snapshot":
+                    run_snapshot(ctx)
+                case "backfill":
+                    run_backfill(
+                        ctx,
+                        from_year=args.from_year,
+                        revenue_months=args.revenue_months,
+                        dividend_years=args.dividend_years,
+                        steps=set(args.steps),
+                    )
+                case "verify-margins":
+                    return verify_margins(ctx)
+        finally:
+            db.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

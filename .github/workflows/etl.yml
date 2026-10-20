@@ -1,0 +1,73 @@
+name: ETL
+
+# 時間皆為 UTC（台灣 = UTC+8）
+on:
+  schedule:
+    - cron: "0 15 * * 1-5" # daily：週一至五 23:00
+    - cron: "30 23 * * 1-5" # daily：隔天 07:30，補抓較晚更新的估值
+    - cron: "0 13 1-15 * *" # monthly：每月 1–15 日 21:00（月營收 10 日前公告）
+    - cron: "0 14 * 3,4,5,8,11 *" # quarterly：財報季每天 22:00
+    - cron: "0 14 * * 0" # quarterly：其他月份每週日 22:00
+    - cron: "0 14 * * 6" # dividends：每週六 22:00
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 要執行的工作
+        type: choice
+        options: [daily, monthly, quarterly, dividends, snapshot, backfill, verify-margins]
+        default: daily
+      args:
+        description: 額外參數（例如 --dry-run 或 backfill 的 --from-year 2023）
+        type: string
+        default: ""
+
+# 同一時間只跑一個 ETL，避免互相覆寫；排隊而不是取消
+concurrency:
+  group: etl
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: etl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: etl/pyproject.toml
+      - run: pip install .
+
+      - name: 決定要執行的工作
+        id: cmd
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_COMMAND: ${{ inputs.command }}
+        run: |
+          case "$SCHEDULE" in
+            "0 15 * * 1-5"|"30 23 * * 1-5") cmd=daily ;;
+            "0 13 1-15 * *") cmd=monthly ;;
+            "0 14 * 3,4,5,8,11 *"|"0 14 * * 0") cmd=quarterly ;;
+            "0 14 * * 6") cmd=dividends ;;
+            *) cmd="$INPUT_COMMAND" ;;
+          esac
+          echo "command=$cmd" >> "$GITHUB_OUTPUT"
+          echo "執行：$cmd" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 執行 ETL
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          COMMAND: ${{ steps.cmd.outputs.command }}
+          ARGS: ${{ inputs.args }}
+        # ARGS 刻意不加引號，讓多個參數分開傳入；來源只有 workflow_dispatch（需要 repo 寫入權限）
+        run: python -m tw_etl "$COMMAND" $ARGS

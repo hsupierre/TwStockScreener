@@ -129,6 +129,50 @@ pip install -e ".[dev]"
 - 上櫃行情包含權證、債券等，要用代號規則過濾。
 - 證交所與櫃買中心的資料開放**非商業使用**。商業化前請洽詢資訊授權。
 
+## ETL（`etl/`）
+
+純 Python，只依賴 httpx，透過 Supabase REST API 寫入（使用 service_role key）。
+
+```
+etl/tw_etl/
+  sources/openapi.py     TWSE / TPEx OpenAPI：公司、行情、估值、最新月營收、官方營益分析
+  sources/mops.py        MOPS：季報彙總表（損益、資產負債、現金流量）、月營收歷史、股利分派
+  transform/financials.py  欄位對應（各產業格式）、年度累計 → 單季
+  transform/snapshot.py    選股指標計算、寫入前合理性檢查
+  load/supabase.py       分批 upsert、分頁讀取
+  jobs.py                daily / monthly / quarterly / dividends / snapshot / backfill
+  runs.py                etl_runs 執行紀錄、data_freshness
+  verify.py              與官方「營益分析」交叉比對
+```
+
+| 指令（在 `etl/` 目錄） | 內容 | 排程（台灣時間） |
+|---|---|---|
+| `python -m tw_etl daily` | 公司基本資料、行情、估值，接著重算快照 | 週一至五 23:00、隔天 07:30 |
+| `python -m tw_etl monthly` | 最新月營收 | 每月 1–15 日 21:00 |
+| `python -m tw_etl quarterly` | 去年與今年各季季報（MOPS） | 財報季（3、4、5、8、11 月）每天，其他月份每週日 |
+| `python -m tw_etl dividends` | 去年與今年董事會決議的股利 | 每週六 |
+| `python -m tw_etl snapshot` | 只重算快照 | — |
+| `python -m tw_etl backfill` | 一次性歷史回補（季報 2023 起、營收 36 個月、股利 10 年） | 手動 |
+| `python -m tw_etl verify-margins` | 用單季值重組累計毛利率、營益率，與官方營益分析比對 | 手動 |
+
+所有指令都可以加 `--dry-run`，只抓取和計算，不寫入資料庫。
+
+設計重點：
+
+- **單季值**：官方季報是年度累計值，所以 quarterly 每次都抓整年各季，再前後相減。缺少前一季累計值時，單季流量存 `NULL`，不會猜測。
+- **合理性檢查**：寫入快照前會檢查筆數 ≥ 1,500、有收盤價的比例 ≥ 90%、有近四季 EPS 的比例 ≥ 70%，以及 2330 的數值是否合理。沒通過就讓工作失敗，並**保留線上舊快照**。
+- **禮貌抓取**：MOPS 每次請求間隔 3 秒，其他網站 0.5 秒；遇到逾時或 5xx 會指數退避重試；MOPS 回應「查詢過於頻繁」時至少等 60 秒。
+- **冪等**：所有寫入都是 upsert，重跑不會產生重複資料。
+
+GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
+
+- **Secrets**：`NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`REVALIDATE_SECRET`
+- **Variables**：`NEXT_PUBLIC_SITE_URL`
+
+也可以在 Actions 頁面手動執行（workflow_dispatch），選擇要跑的工作並加上參數。
+
+> 公開 repo 連續 60 天沒有任何 commit 時，GitHub 會自動停用排程，屆時要到 Actions 頁面重新啟用。
+
 ## 資料庫
 
 Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，所有變更都要寫成新的 migration。
@@ -161,7 +205,7 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 
 - [x] **P0** 資料端點驗證、專案骨架、CI
 - [x] **P1** Supabase schema、migrations、RLS
-- [ ] **P2** ETL 與排程
+- [x] **P2** ETL 與排程
 - [ ] **P3** 選股器
 - [ ] **P4** 個股頁與 SEO
 - [ ] **P5** 部署與監控
@@ -191,3 +235,19 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
    - 格式錯誤的代號會被 check constraint 擋下
 5. `npm run db:types` 之後執行 `git diff src/types/database.ts`：沒有差異，代表型別和 schema 同步。
 6. `npm run check && npm run build`：通過。
+
+### P2
+
+在 `etl/` 目錄執行：
+
+1. `pytest`：單元測試全部通過。涵蓋民國日期、千元換算、HTML 解析容錯、各產業財報欄位對應、累計轉單季、TTM、ROE、連續成長、股利、合理性檢查。
+2. `ruff check . && ruff format --check .`：通過。
+3. `python -m tw_etl daily --dry-run`：抓到約 1,980 家公司、約 1,980 筆行情估值。資料庫還沒有季報時，快照會被合理性檢查擋下（這是預期行為）。
+4. `python -m tw_etl backfill`：完成後在 Supabase 的 SQL Editor 執行：
+   ```sql
+   select status, job, rows_written, finished_at from etl_runs order by id desc limit 10;
+   select count(*) from screen_snapshot;              -- 約 1,900
+   select * from screen_snapshot where code in ('2330', '2881', '6488');
+   ```
+5. `python -m tw_etl verify-margins`：重組的累計毛利率、營益率，與官方「營益分析」比對，不一致比例 ≤ 1%。
+6. 抽查 2330 的單季 EPS、ROE、月營收年增率，跟公開資訊觀測站的數字一致。

@@ -3,7 +3,7 @@ name = "tw-stock-etl"
 version = "0.1.0"
 description = "台股選股平台的資料擷取與轉換（TWSE / TPEx / MOPS → Supabase）"
 requires-python = ">=3.12"
-dependencies = []  # P2 才加入 httpx、polars、supabase 等套件
+dependencies = ["httpx>=0.27,<1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
@@ -13,7 +13,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["scripts*"]
+include = ["tw_etl*", "scripts*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
