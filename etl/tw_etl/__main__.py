@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from .config import Settings
 from .http import Fetcher
 from .jobs import Context, run_backfill, run_daily, run_dividends, run_monthly, run_quarterly, run_snapshot
 from .load.supabase import Supabase
+from .runs import RECORDED, render_summary
 from .verify import verify_margins
 
 BACKFILL_STEPS = ("daily", "quarterly", "revenue", "dividend")
@@ -60,34 +62,53 @@ def main(argv: list[str] | None = None) -> int:
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
+    warnings = _WarningCounter()
+    logging.getLogger().addHandler(warnings)
+
     settings = Settings.from_env()
     db = Supabase(settings.supabase_url, settings.service_key)
+    try:
+        return _run(args, settings, db)
+    finally:
+        db.close()
+        if summary_path := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(summary_path, "a", encoding="utf-8") as fh:
+                fh.write(render_summary(RECORDED, dry_run=args.dry_run, warnings=warnings.count))
+
+
+class _WarningCounter(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.count = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.count += 1
+
+
+def _run(args: argparse.Namespace, settings: Settings, db: Supabase) -> int:
     with Fetcher() as fetcher:
         ctx = Context(db=db, fetcher=fetcher, settings=settings, dry_run=args.dry_run)
-        try:
-            match args.command:
-                case "daily":
-                    run_daily(ctx)
-                case "monthly":
-                    run_monthly(ctx)
-                case "quarterly":
-                    run_quarterly(ctx, args.years)
-                case "dividends":
-                    run_dividends(ctx, args.years)
-                case "snapshot":
-                    run_snapshot(ctx)
-                case "backfill":
-                    run_backfill(
-                        ctx,
-                        from_year=args.from_year,
-                        revenue_months=args.revenue_months,
-                        dividend_years=args.dividend_years,
-                        steps=set(args.steps),
-                    )
-                case "verify-margins":
-                    return verify_margins(ctx)
-        finally:
-            db.close()
+        match args.command:
+            case "daily":
+                run_daily(ctx)
+            case "monthly":
+                run_monthly(ctx)
+            case "quarterly":
+                run_quarterly(ctx, args.years)
+            case "dividends":
+                run_dividends(ctx, args.years)
+            case "snapshot":
+                run_snapshot(ctx)
+            case "backfill":
+                run_backfill(
+                    ctx,
+                    from_year=args.from_year,
+                    revenue_months=args.revenue_months,
+                    dividend_years=args.dividend_years,
+                    steps=set(args.steps),
+                )
+            case "verify-margins":
+                return verify_margins(ctx)
     return 0
 
 

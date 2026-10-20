@@ -135,6 +135,7 @@ def load_quarters(ctx: Context, run: Run, years: list[int]) -> None:
             for market in MARKETS:
                 for report in stmts:
                     stmts[report].extend(mops.fetch_statement(ctx.fetcher, report, market, year, quarter))  # type: ignore[arg-type]
+            run.details[f"{year}Q{quarter}"] = len(stmts["income"])
             if not stmts["income"]:
                 log.info("%dQ%d 尚無資料", year, quarter)
                 continue
