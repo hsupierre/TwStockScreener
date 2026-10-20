@@ -101,7 +101,7 @@ pip install -e ".[dev]"
 | `npm run check` | lint、typecheck、format、unit 一次跑完 |
 | `npm run test:db` | 對 Supabase 專案跑 RLS／權限整合測試（需要 `.env.local`） |
 | `npm run db:push` | 把新的 migration 套用到已連結的專案 |
-| `npm run db:diff` | 比對遠端資料庫與 migrations 的差異 |
+| `npm run db:status` | 列出本機與遠端各自套用了哪些 migration（不需要 Docker） |
 | `npm run db:types` | 重新產生資料庫 TypeScript 型別（schema 有變更時執行） |
 | `python etl/scripts/check_supabase.py` | 檢查 `.env.local` 的 Supabase 設定與連線（不會印出 key） |
 | `python etl/scripts/verify_sources.py` | 實測所有資料端點，輸出 `etl/reports/sources.md` |
@@ -181,7 +181,8 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 
 1. `python etl/scripts/check_supabase.py`：URL、公開 key、機密 key 三項都顯示 ✅。
 2. `npm run db:push`：顯示 `Remote database is up to date`，代表 migrations 都已經套用。
-3. `npm run db:diff`：沒有差異，代表遠端資料庫和 migrations 一致。
+3. `npm run db:status`：3 個 migration 在 Local 和 Remote 兩欄都有出現，代表兩邊一致。
+   （`supabase db diff` 需要 Docker 建立 shadow database，本專案不使用。）
 4. `npm run test:db`：15 個測試通過，包括：
    - anon 可以讀 7 張公開表
    - anon 不能新增、修改、刪除（`42501`）
