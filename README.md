@@ -41,7 +41,11 @@ src/
     env.server.ts      伺服器專用環境變數（server-only）
     format.ts          數值格式化（千分位、%、億元）
     site.ts            網站設定、免責聲明、資料來源
+    supabase/          public（唯讀、可快取）、server（帶 session）、client（瀏覽器）、admin（service_role）
+  types/database.ts    由 `npm run db:types` 產生，不要手動修改
 tests/e2e/             Playwright E2E 測試
+tests/db/              Supabase RLS 整合測試
+scripts/               開發用腳本（型別產生）
 etl/
   scripts/verify_sources.py   資料端點驗證腳本
   tests/                      pytest
@@ -58,6 +62,20 @@ supabase/              migrations、seed（P1）
 npm install
 cp .env.example .env.local      # 依說明填入 Supabase 等設定（P0 不需要）
 npm run dev                     # http://localhost:3000
+```
+
+### Supabase（第一次設定）
+
+1. 在 [supabase.com](https://supabase.com) 建立免費專案。區域建議選 Northeast Asia (Tokyo)。
+2. 到 **Project Settings → API Keys** 複製 publishable key 和 secret key（或舊版的 anon、service_role），**Project URL** 在 **Data API**。把這三個值填進 `.env.local`。
+3. 確認可以連線：`python etl/scripts/check_supabase.py`
+4. 連結專案並套用 schema：
+
+```bash
+npx supabase login
+npx supabase link --project-ref <你的 project ref>
+npm run db:push        # 套用 supabase/migrations/
+npm run db:types       # 產生 src/types/database.ts
 ```
 
 ETL：
@@ -81,6 +99,11 @@ pip install -e ".[dev]"
 | `npm test` | Vitest 單元測試 |
 | `npm run e2e` | Playwright E2E（會自動 build 並啟動；第一次執行前要跑 `npx playwright install chromium`） |
 | `npm run check` | lint、typecheck、format、unit 一次跑完 |
+| `npm run test:db` | 對 Supabase 專案跑 RLS／權限整合測試（需要 `.env.local`） |
+| `npm run db:push` | 把新的 migration 套用到已連結的專案 |
+| `npm run db:diff` | 比對遠端資料庫與 migrations 的差異 |
+| `npm run db:types` | 重新產生資料庫 TypeScript 型別（schema 有變更時執行） |
+| `python etl/scripts/check_supabase.py` | 檢查 `.env.local` 的 Supabase 設定與連線（不會印出 key） |
 | `python etl/scripts/verify_sources.py` | 實測所有資料端點，輸出 `etl/reports/sources.md` |
 | `cd etl && pytest` / `ruff check .` | ETL 測試與 lint |
 
@@ -106,10 +129,38 @@ pip install -e ".[dev]"
 - 上櫃行情包含權證、債券等，要用代號規則過濾。
 - 證交所與櫃買中心的資料開放**非商業使用**。商業化前請洽詢資訊授權。
 
+## 資料庫
+
+Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，所有變更都要寫成新的 migration。
+
+| 資料表 | 內容 | 權限 |
+|---|---|---|
+| `companies` | 公司基本資料、市場別、產業、財報格式 | 公開唯讀 |
+| `daily_valuation` | 每日收盤價、本益比、殖利率、股價淨值比 | 公開唯讀 |
+| `monthly_revenue` | 月營收、月增率、年增率、累計 | 公開唯讀 |
+| `financials_quarterly` | 季報（損益與現金流為單季值、資產負債為期末值） | 公開唯讀 |
+| `dividends` | 股利分派 | 公開唯讀 |
+| `screen_snapshot` | 選股快照，每檔一列，由 ETL 整批重算 | 公開唯讀 |
+| `data_freshness` | 各資料集最後更新時間 | 公開唯讀 |
+| `etl_runs` | ETL 執行紀錄 | 只有 service_role |
+
+慣例：
+
+- 金額單位是**元**。
+- 比率存成**百分比數字**，例如 `12.34` 代表 12.34%。
+- 沒有資料就存 `NULL`，不要存 0。例如金融業沒有毛利率。
+
+權限有兩層：
+
+- RLS 只開放 SELECT policy。
+- 另外撤銷 anon／authenticated 的寫入權限。之後新增的資料表，預設也不開放給這兩個角色。
+
+> Supabase API 預設每次最多回傳 1,000 列（`max_rows`），讀取完整快照（約 1,800 列）時要用 `.range()` 分頁。
+
 ## 開發進度
 
 - [x] **P0** 資料端點驗證、專案骨架、CI
-- [ ] **P1** Supabase schema、migrations、RLS
+- [x] **P1** Supabase schema、migrations、RLS
 - [ ] **P2** ETL 與排程
 - [ ] **P3** 選股器
 - [ ] **P4** 個股頁與 SEO
@@ -125,3 +176,17 @@ pip install -e ".[dev]"
 3. `npm run e2e`：首頁、404、安全性標頭的 E2E 測試通過（桌面與手機兩種裝置）。
 4. `cd etl && pytest && ruff check .`：通過。
 5. 推上 GitHub 後，CI 的 web、e2e、etl 三個 job 都是綠燈。
+
+### P1
+
+1. `python etl/scripts/check_supabase.py`：URL、公開 key、機密 key 三項都顯示 ✅。
+2. `npm run db:push`：顯示 `Remote database is up to date`，代表 migrations 都已經套用。
+3. `npm run db:diff`：沒有差異，代表遠端資料庫和 migrations 一致。
+4. `npm run test:db`：15 個測試通過，包括：
+   - anon 可以讀 7 張公開表
+   - anon 不能新增、修改、刪除（`42501`）
+   - anon 讀不到 `etl_runs`
+   - service_role 可以寫入
+   - 格式錯誤的代號會被 check constraint 擋下
+5. `npm run db:types` 之後執行 `git diff src/types/database.ts`：沒有差異，代表型別和 schema 同步。
+6. `npm run check && npm run build`：通過。
