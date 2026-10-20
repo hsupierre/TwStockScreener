@@ -1,0 +1,28 @@
+[project]
+name = "tw-stock-etl"
+version = "0.1.0"
+description = "台股選股平台的資料擷取與轉換（TWSE / TPEx / MOPS → Supabase）"
+requires-python = ">=3.12"
+dependencies = []  # P2 才加入 httpx、polars、supabase 等套件
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # 允許全形中文標點

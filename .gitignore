@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp*
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# testing
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# env（.env.example 要進版控）
+.env
+.env*.local
+!.env.example
+
+# python / etl
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+etl/.cache/
+etl/reports/*.json
+
+# supabase
+supabase/.branches/
+supabase/.temp/
+
+# misc
+.DS_Store
+Thumbs.db
+*.log
+.vercel
+.idea/
