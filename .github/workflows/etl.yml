@@ -1,14 +1,14 @@
 name: ETL
 
-# 時間皆為 UTC（台灣 = UTC+8）
+# 時間皆為 UTC（台灣 = UTC+8）。避開整點：GitHub 排程在整點負載高，實測會延遲 2–4 小時
 on:
   schedule:
-    - cron: "0 15 * * 1-5" # daily：週一至五 23:00
-    - cron: "30 23 * * 1-5" # daily：隔天 07:30，補抓較晚更新的估值
-    - cron: "0 13 1-15 * *" # monthly：每月 1–15 日 21:00（月營收 10 日前公告）
-    - cron: "0 14 * 3,4,5,8,11 *" # quarterly：財報季每天 22:00
-    - cron: "0 14 * * 0" # quarterly：其他月份每週日 22:00
-    - cron: "0 14 * * 6" # dividends：每週六 22:00
+    - cron: "17 15 * * 1-5" # daily：週一至五 23:17
+    - cron: "47 23 * * 1-5" # daily：隔天 07:47，補抓較晚更新的估值
+    - cron: "23 13 1-15 * *" # monthly：每月 1–15 日 21:23（月營收 10 日前公告）
+    - cron: "33 14 * 3,4,5,8,11 *" # quarterly：財報季每天 22:33
+    - cron: "33 14 * 1,2,6,7,9,10,12 0" # quarterly：其他月份每週日 22:33
+    - cron: "43 14 * * 6" # dividends：每週六 22:43
   workflow_dispatch:
     inputs:
       command:
@@ -52,10 +52,10 @@ jobs:
           INPUT_COMMAND: ${{ inputs.command }}
         run: |
           case "$SCHEDULE" in
-            "0 15 * * 1-5"|"30 23 * * 1-5") cmd=daily ;;
-            "0 13 1-15 * *") cmd=monthly ;;
-            "0 14 * 3,4,5,8,11 *"|"0 14 * * 0") cmd=quarterly ;;
-            "0 14 * * 6") cmd=dividends ;;
+            "17 15 * * 1-5"|"47 23 * * 1-5") cmd=daily ;;
+            "23 13 1-15 * *") cmd=monthly ;;
+            "33 14 * 3,4,5,8,11 *"|"33 14 * 1,2,6,7,9,10,12 0") cmd=quarterly ;;
+            "43 14 * * 6") cmd=dividends ;;
             *) cmd="$INPUT_COMMAND" ;;
           esac
           echo "command=$cmd" >> "$GITHUB_OUTPUT"

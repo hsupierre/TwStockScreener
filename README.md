@@ -147,10 +147,10 @@ etl/tw_etl/
 
 | 指令（在 `etl/` 目錄） | 內容 | 排程（台灣時間） |
 |---|---|---|
-| `python -m tw_etl daily` | 公司基本資料、行情、估值，接著重算快照 | 週一至五 23:00、隔天 07:30 |
-| `python -m tw_etl monthly` | 最新月營收 | 每月 1–15 日 21:00 |
-| `python -m tw_etl quarterly` | 去年與今年各季季報（MOPS） | 財報季（3、4、5、8、11 月）每天，其他月份每週日 |
-| `python -m tw_etl dividends` | 去年與今年董事會決議的股利 | 每週六 |
+| `python -m tw_etl daily` | 公司基本資料、行情、估值，接著重算快照 | 週一至五 23:17、隔天 07:47 |
+| `python -m tw_etl monthly` | 最新月營收 | 每月 1–15 日 21:23 |
+| `python -m tw_etl quarterly` | 去年與今年各季季報（MOPS） | 財報季（3、4、5、8、11 月）每天 22:33，其他月份每週日 22:33 |
+| `python -m tw_etl dividends` | 去年與今年董事會決議的股利 | 每週六 22:43 |
 | `python -m tw_etl snapshot` | 只重算快照 | — |
 | `python -m tw_etl backfill` | 一次性歷史回補（季報 2023 起、營收 36 個月、股利 10 年） | 手動 |
 | `python -m tw_etl verify-margins` | 用單季值重組累計毛利率、營益率，與官方營益分析比對 | 手動 |
@@ -171,7 +171,9 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 
 也可以在 Actions 頁面手動執行（workflow_dispatch），選擇要跑的工作並加上參數。
 
-> 公開 repo 連續 60 天沒有任何 commit 時，GitHub 會自動停用排程，屆時要到 Actions 頁面重新啟用。
+> - 排程刻意避開整點。GitHub 在整點負載高，實測延遲 2～4 小時，偶爾還會略過。daily 一天排兩次就是為了互相備援。
+> - 公開 repo 連續 60 天沒有任何 commit 時，GitHub 會自動停用排程，屆時要到 Actions 頁面重新啟用。
+> - 每次執行的結果（狀態、筆數、資料基準、重試次數）會寫入 Actions 的 Step Summary（需登入檢視），也會記錄在資料庫的 `etl_runs`。
 
 ## 資料庫
 

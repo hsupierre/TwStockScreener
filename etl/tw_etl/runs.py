@@ -44,7 +44,7 @@ RECORDED: list[Run] = []
 
 
 def render_summary(runs: list[Run], *, dry_run: bool, warnings: int) -> str:
-    """Markdown 執行摘要（寫入 $GITHUB_STEP_SUMMARY，公開 repo 不需登入即可檢視）。"""
+    """Markdown 執行摘要，寫入 $GITHUB_STEP_SUMMARY，顯示在 Actions 執行頁面。"""
     icon = {"success": "✅", "failed": "❌", "running": "⏳"}
     lines = [
         f"### ETL 執行摘要{'（dry-run，未寫入資料庫）' if dry_run else ''}",
