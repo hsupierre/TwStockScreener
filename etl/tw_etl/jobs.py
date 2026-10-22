@@ -124,10 +124,22 @@ def available_quarters(today: date, years: list[int]) -> list[tuple[int, int]]:
     return [(y, q) for y in years for q in range(1, 5) if (y, q) < current]
 
 
+def representative_quarter(counts: dict[tuple[int, int], int], min_share: float = 0.5) -> tuple[int, int] | None:
+    """整體資料基準：已公布家數達到最多那季一半以上的最新一季。
+
+    季報公告期限前會有少數公司提早公布（例如 10 月時只有 5 家公布 Q3），不能因此宣稱資料已更新到該季。
+    """
+    if not counts:
+        return None
+    threshold = max(counts.values()) * min_share
+    eligible = [q for q, n in counts.items() if n > 0 and n >= threshold]
+    return max(eligible) if eligible else None
+
+
 def load_quarters(ctx: Context, run: Run, years: list[int]) -> None:
     known = _known_codes(ctx)
     report_types: dict[str, str] = {}
-    latest: tuple[int, int] | None = None
+    counts: dict[tuple[int, int], int] = {}
     for year in sorted(set(years)):
         cumulative: dict = {}
         for _, quarter in available_quarters(ctx.today, [year]):
@@ -135,12 +147,11 @@ def load_quarters(ctx: Context, run: Run, years: list[int]) -> None:
             for market in MARKETS:
                 for report in stmts:
                     stmts[report].extend(mops.fetch_statement(ctx.fetcher, report, market, year, quarter))  # type: ignore[arg-type]
-            run.details[f"{year}Q{quarter}"] = len(stmts["income"])
+            run.details[f"{year}Q{quarter}"] = counts[(year, quarter)] = len(stmts["income"])
             if not stmts["income"]:
                 log.info("%dQ%d 尚無資料", year, quarter)
                 continue
             cumulative.update(merge_statements(year, quarter, stmts["income"], stmts["balance"], stmts["cashflow"]))
-            latest = max(latest or (year, quarter), (year, quarter))
         rows = _only_known(to_single_quarter(cumulative), known)
         run.rows_written += ctx.write("financials_quarterly", rows, "code,year,quarter")
         report_types.update({r["code"]: r["report_type"] for r in rows if r["report_type"]})
@@ -152,7 +163,7 @@ def load_quarters(ctx: Context, run: Run, years: list[int]) -> None:
         for rt, codes in by_type.items():
             for i in range(0, len(codes), 400):  # 避免 URL 過長
                 ctx.db.update("companies", {"code": in_filter(codes[i : i + 400])}, {"report_type": rt})
-    if latest:
+    if latest := representative_quarter(counts):
         run.as_of = f"{latest[0]}Q{latest[1]}"
 
 
