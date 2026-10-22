@@ -22,7 +22,7 @@ GitHub Actions cron ──► Python ETL（etl/）──► Supabase Postgres �
 | 層 | 技術 |
 |---|---|
 | 前端 | Next.js 16（App Router）、React 19、TypeScript（strict）、Tailwind CSS v4、shadcn/ui |
-| 表格／圖表／URL 狀態 | TanStack Table、Recharts（shadcn chart）、nuqs |
+| 表格／圖表／URL 狀態 | TanStack Virtual（虛擬捲動）、Recharts（shadcn chart）、nuqs |
 | 資料庫／認證 | Supabase（Postgres + RLS、Auth） |
 | ETL | Python 3.12 |
 | 測試 | Vitest + Testing Library、Playwright、pytest |
@@ -36,11 +36,14 @@ src/
   components/
     ui/                shadcn/ui 元件（由 CLI 產生）
     layout/            頁首、頁尾
+    screener/          選股器 UI（篩選面板、策略列、虛擬捲動表格、匯出）
   lib/
     env.ts             環境變數 schema（zod）
     env.server.ts      伺服器專用環境變數（server-only）
     format.ts          數值格式化（千分位、%、億元）
     site.ts            網站設定、免責聲明、資料來源
+    screener/          選股器的純函式：指標定義、篩選排序、策略模板、網址格式、CSV、資料過期判斷
+    data/snapshot.ts   讀取快照（use cache + cacheTag，server-only）
     supabase/          public（唯讀、可快取）、server（帶 session）、client（瀏覽器）、admin（service_role）
   types/database.ts    由 `npm run db:types` 產生，不要手動修改
 tests/e2e/             Playwright E2E 測試
@@ -175,6 +178,18 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 > - 公開 repo 連續 60 天沒有任何 commit 時，GitHub 會自動停用排程，屆時要到 Actions 頁面重新啟用。
 > - 每次執行的結果（狀態、筆數、資料基準、重試次數）會寫入 Actions 的 Step Summary（需登入檢視），也會記錄在資料庫的 `etl_runs`。
 
+## 選股器（`/screener`）
+
+- **資料流**：`getSnapshot()` 用 `'use cache'`、`cacheTag('snapshot')`、`cacheLife('hours')` 讀取整份快照（約 2,000 列，分頁突破 Supabase 1,000 列的上限）。結果會放進頁面的靜態外殼，由 CDN 提供；每小時、或 ETL 通知時才重新讀取資料庫。
+- **篩選在瀏覽器進行**：條件改變只做本機運算，用 shallow 模式更新網址，不會發出請求。
+- **網址就是狀態**，例如 `/screener?dy=4~&roe=8~&pe=~15&m=twse&ind=半導體業&q=台積&s=dy.desc&cols=price,pe,dy`
+  - 範圍寫成 `最小~最大`，任一邊都可以省略。每個指標的參數名稱定義在 `src/lib/screener/metrics.ts` 的 `param`。
+  - `m` 是市場（`twse` 上市、`tpex` 上櫃），`ind` 是產業，`q` 是代號或名稱，`s` 是排序（`參數.asc|desc`），`cols` 是要顯示的欄位。
+  - 預設值不會出現在網址上。
+- **策略模板**定義在 `src/lib/screener/presets.ts`：存股、價值、成長、財務體質。
+- **缺值處理**：設了某個條件，但股票沒有這項資料時（例如金融業沒有毛利率），這檔股票會被排除；排序時缺值一律排在最後。
+- **資料過期提醒**：依各資料集的公告期限判斷（月營收 10 日前、季報 3/31、5/15、8/14、11/14，各留緩衝），在瀏覽器端計算，延遲時顯示警示。
+
 ## 資料庫
 
 Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，所有變更都要寫成新的 migration。
@@ -208,7 +223,7 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 - [x] **P0** 資料端點驗證、專案骨架、CI
 - [x] **P1** Supabase schema、migrations、RLS
 - [x] **P2** ETL 與排程
-- [ ] **P3** 選股器
+- [x] **P3** 選股器
 - [ ] **P4** 個股頁與 SEO
 - [ ] **P5** 部署與監控
 - [ ] **P6** 會員功能
@@ -253,3 +268,13 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
    ```
 5. `python -m tw_etl verify-margins`：重組的累計毛利率、營益率，與官方「營益分析」比對，不一致比例 ≤ 1%。
 6. 抽查 2330 的單季 EPS、ROE、月營收年增率，跟公開資訊觀測站的數字一致。
+
+### P3
+
+1. `npm test`：59 個單元與元件測試通過。涵蓋：
+   - 篩選（含邊界、缺值、單位換算）、排序（缺值排最後、結果穩定）
+   - 網址格式的解析與序列化、策略模板、CSV（BOM、跳脫）、資料過期判斷
+   - 選股器元件：從網址還原、套用模板、即時輸入、表頭排序、空結果
+2. `npm run e2e`：桌面與手機各 8 項，使用真實快照。流程是「套用存股模板 → 改用 ROE 排序 → 匯出 CSV（筆數一致）→ 用同一個網址重新開啟，結果相同」，另外還測搜尋、範圍條件、全部清除、首頁策略卡片，以及手機版沒有整頁橫向捲動。
+3. 手動測試：`npm run dev` 後開啟 http://localhost:3000/screener ，套用任一模板、調整條件、複製網址到無痕視窗開啟，結果應該一樣。
+4. CI 需要在 GitHub Secrets 設定 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`，build 時會預先渲染 `/screener`。

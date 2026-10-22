@@ -12,6 +12,11 @@ concurrency:
 permissions:
   contents: read
 
+# build 時會預先渲染 /screener，需要讀取 Supabase（只用公開的 anon key，受 RLS 保護）
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
 jobs:
   web:
     name: Web（lint / typecheck / unit / build）

@@ -16,9 +16,7 @@ export function SiteFooter() {
             </a>
           ))}
         </p>
-        <p>
-          © {new Date().getFullYear()} {siteConfig.name}
-        </p>
+        <p>© {siteConfig.name}</p>
       </div>
     </footer>
   );

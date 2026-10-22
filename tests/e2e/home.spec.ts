@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("首頁", () => {
-  test("顯示標題、功能卡片與免責聲明", async ({ page }) => {
+  test("顯示標題、策略模板入口與免責聲明", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle(/台股選股/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("基本面");
-    await expect(page.getByRole("region", { name: "功能" }).getByText("內建策略模板")).toBeVisible();
+    const presets = page.getByRole("region", { name: "從策略模板開始" });
+    for (const name of ["存股", "價值", "成長", "財務體質"]) {
+      await expect(presets.getByRole("link", { name: new RegExp(name) })).toBeVisible();
+    }
+    await expect(page.getByRole("link", { name: "開始選股" })).toHaveAttribute("href", "/screener");
     await expect(page.getByRole("contentinfo")).toContainText("不構成任何投資建議");
   });
 

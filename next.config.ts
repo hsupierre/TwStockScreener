@@ -9,6 +9,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Cache Components：use cache / cacheTag / cacheLife，靜態外殼 + 串流（Next 16）
+  cacheComponents: true,
+  partialPrefetching: true,
   poweredByHeader: false,
   typedRoutes: true,
   async headers() {
