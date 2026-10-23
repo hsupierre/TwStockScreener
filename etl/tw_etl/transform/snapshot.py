@@ -80,10 +80,25 @@ AVG_VOLUME_DAYS = 20
 AVG_VOLUME_MIN_DAYS = 10
 
 
+def board_lot(total: int | None, odd: int | None, block: int | None = None) -> int | None:
+    """一般看盤軟體的成交量 = 交易所公布的數字 − 零股 − 鉅額交易。
+
+    上櫃沒有這兩個欄位：櫃買中心公布的成交量本來就不含零股與鉅額。
+    """
+    if total is None:
+        return None
+    return max(total - (odd or 0) - (block or 0), 0)
+
+
 def latest_valuations(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """每檔的最新行情、估值與近 20 個交易日平均成交量。trade_date 為最新一筆有收盤價的日期。"""
+    """每檔的最新行情、估值與近 20 個交易日平均成交量（整股）。trade_date 為最新一筆有收盤價的日期。"""
     by_code: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
+        r = {
+            **r,
+            "volume": board_lot(r.get("volume"), r.get("odd_volume"), r.get("block_volume")),
+            "trade_value": board_lot(r.get("trade_value"), r.get("odd_trade_value"), r.get("block_trade_value")),
+        }
         by_code.setdefault(r["code"], []).append(r)
     out: dict[str, dict[str, Any]] = {}
     for code, items in by_code.items():

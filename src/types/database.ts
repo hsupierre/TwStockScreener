@@ -58,10 +58,14 @@ export type Database = {
       }
       daily_valuation: {
         Row: {
+          block_trade_value: number | null
+          block_volume: number | null
           change: number | null
           close: number | null
           code: string
           dividend_yield: number | null
+          odd_trade_value: number | null
+          odd_volume: number | null
           pb: number | null
           pe: number | null
           source: string | null
@@ -70,10 +74,14 @@ export type Database = {
           volume: number | null
         }
         Insert: {
+          block_trade_value?: number | null
+          block_volume?: number | null
           change?: number | null
           close?: number | null
           code: string
           dividend_yield?: number | null
+          odd_trade_value?: number | null
+          odd_volume?: number | null
           pb?: number | null
           pe?: number | null
           source?: string | null
@@ -82,10 +90,14 @@ export type Database = {
           volume?: number | null
         }
         Update: {
+          block_trade_value?: number | null
+          block_volume?: number | null
           change?: number | null
           close?: number | null
           code?: string
           dividend_yield?: number | null
+          odd_trade_value?: number | null
+          odd_volume?: number | null
           pb?: number | null
           pe?: number | null
           source?: string | null

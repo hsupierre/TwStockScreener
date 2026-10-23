@@ -102,6 +102,10 @@ def test_load_price_history_skips_weekends_and_holidays(monkeypatch):
         return fn
 
     monkeypatch.setattr(jobs, "HISTORY_QUOTES", {"twse": fake("twse"), "tpex": fake("tpex")})
+    monkeypatch.setattr(jobs, "ODD_LOTS", lambda f, day: Partial("twse", "odd", "official", trade_date=day, rows={}))
+    monkeypatch.setattr(
+        jobs, "BLOCK_TRADES", lambda f, day: Partial("twse", "block", "official", trade_date=day, rows={})
+    )
     codes = [{"code": f"{1000 + i}"} for i in range(1000)] + [{"code": f"{5000 + i}"} for i in range(800)]
     db = FakeDb({"companies": codes})
 

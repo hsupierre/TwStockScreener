@@ -68,6 +68,10 @@ DAILY_SOURCES: dict[tuple[str, quotes.Kind], list[tuple[quotes.Source, Callable[
     ("tpex", "quotes"): [("official", official.fetch_tpex_quotes), ("openapi", openapi.fetch_tpex_quotes)],
     ("tpex", "valuations"): [("official", official.fetch_tpex_valuations), ("openapi", openapi.fetch_tpex_valuations)],
 }
+# 上市零股（證交所成交股數含零股，扣掉才是整股）；櫃買中心公布的本來就是整股
+ODD_LOTS: Callable[[Fetcher, date | None], quotes.Partial] = official.fetch_twse_odd
+# 上市鉅額交易（證交所成交股數含鉅額；一般看盤軟體的成交量不含）
+BLOCK_TRADES: Callable[[Fetcher, date | None], quotes.Partial] = official.fetch_twse_block
 # FinMind 免費額度有限，降級模式只補市值最大的這些股票
 FINMIND_MAX_STOCKS = 300
 
@@ -135,7 +139,13 @@ def run_daily(ctx: Context, *, snapshot: bool = True) -> None:
                 report["finmind"] = len(filled)
                 run.details["degraded"] = True
                 daily.extend(filled)
-            daily.extend(quotes.merge_daily(quote, valuation))
+            adjustments: list[quotes.Partial] = []
+            if market == "twse":  # 證交所成交股數含零股與鉅額；櫃買中心公布的本來就不含
+                for kind, fn in (("odd", ODD_LOTS), ("block", BLOCK_TRADES)):
+                    adj = quotes.safe(market, kind, "official", lambda fn=fn: fn(ctx.fetcher, None))  # type: ignore[misc]
+                    report[kind] = adj.summary()
+                    adjustments.append(adj)
+            daily.extend(quotes.merge_daily(quote, valuation, *adjustments))
         daily = _only_known(daily, known)
         if not daily:
             raise SanityError("上市、上櫃行情都無法取得（官網、OpenAPI、FinMind 皆失敗）")
@@ -274,7 +284,8 @@ def load_snapshot_inputs(ctx: Context) -> SnapshotInputs:
         since = date.fromisoformat(latest[0]["trade_date"]) - timedelta(days=35)
         valuations = db.select_all(
             "daily_valuation",
-            select="code,trade_date,close,change,volume,trade_value,pe,pb,dividend_yield",
+            select="code,trade_date,close,change,volume,trade_value,odd_volume,odd_trade_value,"
+            "block_volume,block_trade_value,pe,pb,dividend_yield",
             order="code,trade_date",
             filters={"trade_date": f"gte.{since.isoformat()}"},
         )
@@ -360,7 +371,13 @@ def load_price_history(ctx: Context, run: Run, days: int) -> None:
             if part.error or len(part.rows) < quotes.MIN_ROWS[market]:
                 log.info("%s %s 略過（%s）", day, market, part.error or f"只有 {len(part.rows)} 筆")
                 continue
-            rows.extend(quotes.merge_daily(part, None))
+            adjustments: list[quotes.Partial] = []
+            if market == "twse":
+                for kind, fn in (("odd", ODD_LOTS), ("block", BLOCK_TRADES)):
+                    adjustments.append(
+                        quotes.safe(market, kind, "official", lambda fn=fn, d=day: fn(ctx.fetcher, d))  # type: ignore[misc]
+                    )
+            rows.extend(quotes.merge_daily(part, None, *adjustments))
         if rows:
             run.rows_written += ctx.write("daily_valuation", _only_known(rows, known), "code,trade_date")
             trading_days.append(day.isoformat())

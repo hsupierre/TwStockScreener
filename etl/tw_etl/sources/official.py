@@ -138,6 +138,63 @@ def fetch_twse_valuations(f: Fetcher) -> Partial:
     return parse_twse_valuations(f.get_json(f"{TWSE_WEB}/BWIBBU_d", params={"response": "json", "selectType": "ALL"}))
 
 
+# ── 上市零股（證交所的成交股數含零股，要扣掉才是整股成交量）───────────
+
+
+def parse_twse_odd(intraday: dict[str, Any], after_hours: dict[str, Any]) -> Partial:
+    """盤中零股（TWTC7U）＋盤後零股（TWT53U）相加。兩者都要成功且同一天，否則整份不採用。"""
+    totals: dict[str, dict[str, int]] = {}
+    days = set()
+    for data in (intraday, after_hours):
+        if str(data.get("stat", "")).upper() != "OK":
+            raise ValueError(f"證交所零股資料沒有資料：stat={data.get('stat')!r}")
+        days.add(ad_date(data.get("date")))
+        idx = _index(data["fields"])
+        for r in data["data"]:
+            code = str(_get(r, idx, "證券代號") or "").strip()
+            acc = totals.setdefault(code, {"odd_volume": 0, "odd_trade_value": 0})
+            acc["odd_volume"] += to_int(_get(r, idx, "成交股數")) or 0
+            acc["odd_trade_value"] += to_int(_get(r, idx, "成交金額")) or 0
+    if len(days) != 1 or None in days:
+        raise ValueError(f"盤中與盤後零股的日期不一致：{sorted(map(str, days))}")
+    day = days.pop()
+    return from_rows("twse", "odd", "official", ((code, day, values) for code, values in totals.items()))
+
+
+def fetch_twse_odd(f: Fetcher, day: date | None = None) -> Partial:
+    params = {"selectType": "ALL", "response": "json"}
+    if day:
+        params["date"] = day.strftime("%Y%m%d")
+    return parse_twse_odd(
+        f.get_json(f"{TWSE_WEB}/TWTC7U", params=params),
+        f.get_json(f"{TWSE_WEB}/TWT53U", params=params),
+    )
+
+
+def parse_twse_block(data: dict[str, Any]) -> Partial:
+    """鉅額交易（BFIAUU）：同一檔可能有配對、逐筆等多筆，加總。"""
+    if str(data.get("stat", "")).upper() != "OK":
+        raise ValueError(f"證交所鉅額交易沒有資料：stat={data.get('stat')!r}")
+    day = ad_date(data.get("date"))
+    idx = _index(data["fields"])
+    totals: dict[str, dict[str, int]] = {}
+    for r in data.get("data") or []:
+        code = str(_get(r, idx, "證券代號") or "").strip()
+        acc = totals.setdefault(code, {"block_volume": 0, "block_trade_value": 0})
+        acc["block_volume"] += to_int(_get(r, idx, "成交股數")) or 0
+        acc["block_trade_value"] += to_int(_get(r, idx, "成交金額")) or 0
+    if not totals:  # 當天沒有任何鉅額交易：回傳空的成功結果（每檔記為 0）
+        return Partial("twse", "block", "official", trade_date=day, rows={})
+    return from_rows("twse", "block", "official", ((c, day, v) for c, v in totals.items()))
+
+
+def fetch_twse_block(f: Fetcher, day: date | None = None) -> Partial:
+    params = {"selectType": "S", "response": "json"}
+    if day:
+        params["date"] = day.strftime("%Y%m%d")
+    return parse_twse_block(f.get_json("https://www.twse.com.tw/rwd/zh/block/BFIAUU", params=params))
+
+
 # ── 上櫃 ─────────────────────────────────────────────────
 
 

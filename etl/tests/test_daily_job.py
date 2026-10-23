@@ -32,8 +32,12 @@ def fail(message: str):
     return fn
 
 
-def set_sources(monkeypatch, table: dict[tuple[str, str], list[tuple[str, Any]]]) -> None:
+def set_sources(monkeypatch, table: dict[tuple[str, str], list[tuple[str, Any]]], odd=None) -> None:
     monkeypatch.setattr(jobs, "DAILY_SOURCES", table)
+    monkeypatch.setattr(
+        jobs, "ODD_LOTS", odd or (lambda f, day: Partial("twse", "odd", "official", error="測試未提供"))
+    )
+    monkeypatch.setattr(jobs, "BLOCK_TRADES", lambda f, day: Partial("twse", "block", "official", error="測試未提供"))
 
 
 def healthy(official_day=D2, openapi_day=D1):

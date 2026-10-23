@@ -21,7 +21,7 @@ from ..parse import is_common_stock
 log = logging.getLogger(__name__)
 
 Source = Literal["official", "openapi", "finmind"]
-Kind = Literal["quotes", "valuations"]
+Kind = Literal["quotes", "valuations", "odd", "block"]
 PRIORITY: dict[str, int] = {"official": 0, "openapi": 1, "finmind": 2}
 
 # 合理的最少筆數（一般股票）：上市約 1,050、上櫃約 880 檔
@@ -82,10 +82,21 @@ def choose(candidates: Iterable[Partial], min_rows: int) -> Partial | None:
     return max(valid, key=lambda c: (c.trade_date, -PRIORITY[c.source]))
 
 
-def merge_daily(quotes: Partial | None, valuations: Partial | None) -> list[dict[str, Any]]:
+# 要從交易所公布的成交量扣除的部分（只有上市有）：零股、鉅額交易
+ADJUSTMENT_FIELDS: dict[str, tuple[str, str]] = {
+    "odd": ("odd_volume", "odd_trade_value"),
+    "block": ("block_volume", "block_trade_value"),
+}
+
+
+def merge_daily(
+    quotes: Partial | None, valuations: Partial | None, *adjustments: Partial | None
+) -> list[dict[str, Any]]:
     """合併成 daily_valuation 的列，以（代號, 日期）為 key；source 記錄收盤價來源。
 
     行情與估值日期不同時各自成列；快照計算會對每個欄位取最近一筆有值的資料。
+    adjustments（上市零股、鉅額交易）只在與行情同一天時併入：當天沒有成交的股票記為 0，
+    與「沒有這項資料」（NULL）區分。
     """
     rows: dict[tuple[str, date], dict[str, Any]] = {}
     for part in (quotes, valuations):
@@ -96,4 +107,12 @@ def merge_daily(quotes: Partial | None, valuations: Partial | None) -> list[dict
             row.update(values)
             if part.kind == "quotes" or "source" not in row:
                 row["source"] = part.source
+    for adj in adjustments:
+        if not quotes or not adj or adj.error or adj.trade_date != quotes.trade_date:
+            continue
+        for code in quotes.rows:
+            values = adj.rows.get(code, {})
+            row = rows[(code, quotes.trade_date)]  # type: ignore[index]
+            for name in ADJUSTMENT_FIELDS[adj.kind]:
+                row[name] = values.get(name, 0)
     return list(rows.values())
