@@ -1,5 +1,5 @@
 import { METRIC_BY_KEY, type MetricKey } from "./metrics";
-import type { Market, StockRow } from "./types";
+import type { Market, ScreenerRow } from "./types";
 
 /** 篩選範圍，以輸入單位表示（例如市值以「億」）。null 代表不限。 */
 export interface Range {
@@ -42,7 +42,7 @@ export function inRange(value: number | null, range: Range, scale = 1): boolean 
   return (range.min === null || v >= range.min) && (range.max === null || v <= range.max);
 }
 
-export function applyFilters(rows: readonly StockRow[], filters: ScreenerFilters): StockRow[] {
+export function applyFilters<T extends ScreenerRow>(rows: readonly T[], filters: ScreenerFilters): T[] {
   const q = filters.q.trim().toLowerCase();
   const markets = new Set<string>(filters.markets);
   const industries = new Set(filters.industries);
@@ -57,7 +57,7 @@ export function applyFilters(rows: readonly StockRow[], filters: ScreenerFilters
 }
 
 /** 排序；沒有資料的股票一律排在最後（不論升冪或降冪）。 */
-export function sortRows(rows: readonly StockRow[], sort: Sort): StockRow[] {
+export function sortRows<T extends ScreenerRow>(rows: readonly T[], sort: Sort): T[] {
   const dir = sort.desc ? -1 : 1;
   return [...rows].sort((a, b) => {
     if (sort.key === "code") return a.code.localeCompare(b.code) * dir;

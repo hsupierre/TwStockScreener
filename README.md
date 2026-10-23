@@ -194,6 +194,23 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 - **缺值處理**：設了某個條件，但股票沒有這項資料時（例如金融業沒有毛利率），這檔股票會被排除；排序時缺值一律排在最後。
 - **資料過期提醒**：依各資料集的公告期限判斷（月營收 10 日前、季報 3/31、5/15、8/14、11/14，各留緩衝），在瀏覽器端計算，延遲時顯示警示。
 
+## 快取更新與監控
+
+- **`POST /api/revalidate`**：ETL 寫入快照後呼叫，用 `revalidateTag(tag, 'max')` 讓選股頁與個股頁在背景重新產生。
+  - 必須帶 `Authorization: Bearer <REVALIDATE_SECRET>`，比對時使用 `timingSafeEqual`。
+  - body 是 `{"tags": ["snapshot"]}`，只接受 `snapshot` 或 `stock:XXXX`。
+  - 伺服器沒設定密鑰時回 503，不會放行。
+  - 網站本身**不需要** service role key。
+- **ETL 失敗時**（`etl/tests/test_snapshot_job.py` 有測試涵蓋）：
+  1. 合理性檢查沒通過時，不寫入也不刪除 `screen_snapshot`，`data_freshness` 也不更新，網站繼續顯示上一份正確的資料。
+  2. 失敗原因寫入 `etl_runs.error`，有完整的 traceback。
+  3. GitHub Actions 會寄 Email 給 workflow 的擁有者。排程工作的通知對象是最後修改 cron 的人，可以在 GitHub 的 Settings → Notifications → Actions 調整。
+  4. 選股頁依各資料集的公告期限，顯示「資料可能尚未更新」的提醒。
+  5. revalidate 通知失敗不會讓 ETL 失敗，頁面最晚一小時後也會自動更新。
+- **選股頁資料量**：
+  - 快照用欄位式緊湊格式內嵌（`lib/screener/codec.ts`），HTML 從 1.4 MB 降到 0.36 MB。
+  - 靜態外殼直接放市值前 30 檔的預覽，版面跟選股器相同，表格不用等 JavaScript 就會出現，搜尋引擎也看得到。
+
 ## 個股頁（`/stocks/[code]`）
 
 - **靜態輸出**：`ensureStatic = 'navigation'`。build 時用 `generateStaticParams` 預先產生市值前 100 大；其他股票第一次被造訪時產生並存進快取，之後都是靜態頁。實測第一次約 0.7 秒，之後約 0.08 秒。

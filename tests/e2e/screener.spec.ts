@@ -48,7 +48,10 @@ test.describe("選股器", () => {
       ]);
       expect(download.suggestedFilename()).toMatch(/^台股選股_\d{8}\.csv$/);
       const csv = await readFile((await download.path())!, "utf-8");
-      const lines = csv.replace(/^﻿/, "").trim().split(/\r?\n/);
+      const lines = csv
+        .replace(/^\uFEFF/, "")
+        .trim()
+        .split(/\r?\n/);
       expect(lines[0]).toContain("代號,名稱,市場,產業");
       expect(lines).toHaveLength(afterPreset.count + 1);
     }

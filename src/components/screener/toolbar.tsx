@@ -16,10 +16,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { csvFilename, toCsv } from "@/lib/screener/csv";
 import { DEFAULT_COLUMNS, METRIC_GROUPS, METRICS, type MetricKey } from "@/lib/screener/metrics";
 import { PRESETS, type Preset } from "@/lib/screener/presets";
-import type { StockRow } from "@/lib/screener/types";
+import type { ScreenerRow } from "@/lib/screener/types";
 import { cn } from "@/lib/utils";
 
-export function PresetBar({ active, onApply }: { active: Preset | undefined; onApply: (p: Preset) => void }) {
+export function PresetBar({
+  active,
+  onApply,
+  disabled,
+}: {
+  active: Preset | undefined;
+  onApply: (p: Preset) => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="策略模板">
       <span className="text-sm text-muted-foreground">策略模板</span>
@@ -30,6 +38,7 @@ export function PresetBar({ active, onApply }: { active: Preset | undefined; onA
               size="sm"
               variant={active?.id === p.id ? "default" : "outline"}
               aria-pressed={active?.id === p.id}
+              disabled={disabled}
               onClick={() => onApply(p)}
             >
               {p.name}
@@ -90,7 +99,7 @@ export function ExportButton({
   rows,
   columns,
 }: {
-  rows: readonly StockRow[];
+  rows: readonly ScreenerRow[];
   columns: readonly MetricKey[];
 }) {
   function download() {

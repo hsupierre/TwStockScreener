@@ -28,7 +28,7 @@ describe("toCsv", () => {
       ],
       ["pe", "gross_margin"],
     );
-    expect(csv.startsWith("﻿")).toBe(true);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
     const lines = csv.slice(1).trimEnd().split("\r\n");
     expect(lines[0]).toBe("代號,名稱,市場,產業,本益比,毛利率");
     expect(lines[1]).toBe("2330,台積電,上市,半導體業,28.05,");

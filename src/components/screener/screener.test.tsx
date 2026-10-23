@@ -5,9 +5,10 @@ import type { ReactNode } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { packRows } from "@/lib/screener/codec";
 import { makeRow } from "@/lib/screener/test-utils";
 
-import { Screener } from "./screener";
+import { Screener, ScreenerPreview } from "./screener";
 
 const rows = [
   makeRow({
@@ -51,7 +52,7 @@ function renderScreener(searchParams = "", onUrlUpdate?: (e: UrlUpdateEvent) => 
       <TooltipProvider>{children}</TooltipProvider>
     </NuqsTestingAdapter>
   );
-  return render(<Screener rows={rows} industries={["半導體業", "水泥工業", "金融保險業"]} />, { wrapper });
+  return render(<Screener snapshot={packRows(rows, ["半導體業", "水泥工業", "金融保險業"])} />, { wrapper });
 }
 
 const bodyCodes = () =>
@@ -107,5 +108,25 @@ describe("Screener", () => {
     renderScreener("?pe=~1");
     expect(screen.getByText("沒有符合條件的股票")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /匯出 CSV/ })).toBeDisabled();
+  });
+});
+
+describe("ScreenerPreview（靜態外殼）", () => {
+  it("依市值列出前幾檔、按鈕停用並標示載入中，不需要網址狀態", () => {
+    const many = Array.from({ length: 40 }, (_, i) =>
+      makeRow({ code: String(1000 + i), name: `股票${i}`, market_cap: i * 1e9 }),
+    );
+    render(
+      <TooltipProvider>
+        <ScreenerPreview snapshot={packRows(many, [])} />
+      </TooltipProvider>,
+    );
+    const codes = bodyCodes();
+    expect(codes.length).toBeGreaterThan(0);
+    expect(codes.length).toBeLessThanOrEqual(30);
+    expect(codes[0]).toBe("1039"); // 市值最大
+    expect(screen.getByText(/符合條件/)).toHaveTextContent("40 檔");
+    expect(screen.getByRole("button", { name: "存股" })).toBeDisabled();
+    expect(screen.getByRole("region", { name: "選股結果（載入中）" })).toBeInTheDocument();
   });
 });

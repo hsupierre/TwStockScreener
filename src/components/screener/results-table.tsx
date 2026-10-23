@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatMetric, trendClass } from "@/lib/screener/display";
 import type { Sort, SortKey } from "@/lib/screener/filters";
 import { METRIC_BY_KEY, type MetricKey } from "@/lib/screener/metrics";
-import { MARKET_LABELS, type Market, type StockRow } from "@/lib/screener/types";
+import { MARKET_LABELS, type Market, type ScreenerRow } from "@/lib/screener/types";
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 40;
@@ -19,7 +19,7 @@ const ROW_HEIGHT = 40;
 const ASC_FIRST = new Set<SortKey>(["code", "pe", "pb", "debt_ratio"]);
 
 interface ResultsTableProps {
-  rows: readonly StockRow[];
+  rows: readonly ScreenerRow[];
   columns: readonly MetricKey[];
   sort: Sort;
   onSort: (sort: Sort) => void;
