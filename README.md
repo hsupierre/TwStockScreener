@@ -194,6 +194,14 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 - **缺值處理**：設了某個條件，但股票沒有這項資料時（例如金融業沒有毛利率），這檔股票會被排除；排序時缺值一律排在最後。
 - **資料過期提醒**：依各資料集的公告期限判斷（月營收 10 日前、季報 3/31、5/15、8/14、11/14，各留緩衝），在瀏覽器端計算，延遲時顯示警示。
 
+## 部署（Vercel）
+
+- 正式網址：https://tw-stock-screener-fawn.vercel.app
+- 只部署 Next.js 網站。ETL 在 GitHub Actions 執行，因為 Vercel Hobby 的函式最長只能跑 60 秒。
+- 函式區域用 `vercel.json` 指定為 `syd1`（雪梨），跟 Supabase（`ap-southeast-2`）放在同一區，資料庫查詢就不用跨洲。頁面本身由 Vercel 的全球 CDN 提供，台灣的使用者會從香港節點取得。
+- Vercel 環境變數：`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、`REVALIDATE_SECRET`、`NEXT_PUBLIC_SITE_URL`。**不需要** service role key。
+- GitHub（給 ETL 通知網站）：Secret `REVALIDATE_SECRET` 要跟 Vercel 上的一樣；Variable 設 `NEXT_PUBLIC_SITE_URL`。
+
 ## 快取更新與監控
 
 - **`POST /api/revalidate`**：ETL 寫入快照後呼叫，用 `revalidateTag(tag, 'max')` 讓選股頁與個股頁在背景重新產生。
