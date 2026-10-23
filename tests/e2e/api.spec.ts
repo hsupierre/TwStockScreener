@@ -18,3 +18,13 @@ test.describe("/api/revalidate", () => {
     expect((await request.get("/api/revalidate")).status()).toBe(405);
   });
 });
+
+test.describe("/api/cron/health", () => {
+  test("沒有或錯誤的 CRON_SECRET 一律拒絕", async ({ request }) => {
+    for (const authorization of [undefined, "Bearer wrong-secret"]) {
+      const res = await request.get("/api/cron/health", { headers: authorization ? { authorization } : {} });
+      expect([401, 503]).toContain(res.status());
+      expect(res.headers()["cache-control"]).toBe("no-store");
+    }
+  });
+});
