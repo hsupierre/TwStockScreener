@@ -23,6 +23,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: 檢查必要的 Secrets
+        # 只檢查是否有值，不輸出內容；缺少時用 annotation 標出名稱（annotation 不需登入即可檢視）
+        run: |
+          missing=0
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=缺少 GitHub Secret::$name 沒有設定（Settings → Secrets and variables → Actions → Repository secrets）"
+              missing=1
+            fi
+          done
+          exit $missing
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
