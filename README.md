@@ -37,6 +37,7 @@ src/
     ui/                shadcn/ui 元件（由 CLI 產生）
     layout/            頁首、頁尾
     screener/          選股器 UI（篩選面板、策略列、虛擬捲動表格、匯出）
+    stock/             個股頁 UI（重點指標、營收與 EPS 圖表、季報表、股利表）
   lib/
     env.ts             環境變數 schema（zod）
     env.server.ts      伺服器專用環境變數（server-only）
@@ -44,6 +45,9 @@ src/
     site.ts            網站設定、免責聲明、資料來源
     screener/          選股器的純函式：指標定義、篩選排序、策略模板、網址格式、CSV、資料過期判斷
     data/snapshot.ts   讀取快照（use cache + cacheTag，server-only）
+    data/stock.ts      讀取個股資料（公司、快照、12 季財報、24 個月營收、股利）
+    stock/compute.ts   個股頁的純函式：單季比率、營收序列、年度股利合計
+    og-font.ts         OG 圖片用的中文字型子集（Google Fonts）
     supabase/          public（唯讀、可快取）、server（帶 session）、client（瀏覽器）、admin（service_role）
   types/database.ts    由 `npm run db:types` 產生，不要手動修改
 tests/e2e/             Playwright E2E 測試
@@ -190,6 +194,18 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 - **缺值處理**：設了某個條件，但股票沒有這項資料時（例如金融業沒有毛利率），這檔股票會被排除；排序時缺值一律排在最後。
 - **資料過期提醒**：依各資料集的公告期限判斷（月營收 10 日前、季報 3/31、5/15、8/14、11/14，各留緩衝），在瀏覽器端計算，延遲時顯示警示。
 
+## 個股頁（`/stocks/[code]`）
+
+- **靜態輸出**：`ensureStatic = 'navigation'`。build 時用 `generateStaticParams` 預先產生市值前 100 大；其他股票第一次被造訪時產生並存進快取，之後都是靜態頁。實測第一次約 0.7 秒，之後約 0.08 秒。
+- **正確的 404**：沒預先產生的頁面，第一次請求會等整頁產生完才回應，所以不存在的代號能回傳 HTTP 404 加上 noindex，不會變成串流後才出錯的「軟 404」。
+- **快取**：`getStockDetail()` 跟快照共用 `snapshot` 標籤，ETL 通知時兩者一起失效；另外每小時自動更新一次。
+- **SEO**：
+  - 每檔股票各有 title 和 description（內含股價、本益比、殖利率等數字），以及 canonical、Open Graph 和麵包屑 JSON-LD。
+  - `sitemap.xml` 列出全部約 1,980 檔。
+  - OG 圖片用中文字型子集產生（約 40 KB），可被 CDN 快取一天。
+- **內容**：重點指標（與選股器使用相同的定義）、24 個月營收與年增率圖、12 季 EPS 圖與季報表（金額固定以億元顯示）、近 10 年股利、公司資料。
+- **連結**：選股結果的股票名稱連到個股頁；個股頁的「同產業選股」會帶入產業條件。
+
 ## 資料庫
 
 Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，所有變更都要寫成新的 migration。
@@ -224,7 +240,7 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 - [x] **P1** Supabase schema、migrations、RLS
 - [x] **P2** ETL 與排程
 - [x] **P3** 選股器
-- [ ] **P4** 個股頁與 SEO
+- [x] **P4** 個股頁與 SEO
 - [ ] **P5** 部署與監控
 - [ ] **P6** 會員功能
 
@@ -278,3 +294,23 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 2. `npm run e2e`：桌面與手機各 8 項，使用真實快照。流程是「套用存股模板 → 改用 ROE 排序 → 匯出 CSV（筆數一致）→ 用同一個網址重新開啟，結果相同」，另外還測搜尋、範圍條件、全部清除、首頁策略卡片，以及手機版沒有整頁橫向捲動。
 3. 手動測試：`npm run dev` 後開啟 http://localhost:3000/screener ，套用任一模板、調整條件、複製網址到無痕視窗開啟，結果應該一樣。
 4. CI 需要在 GitHub Secrets 設定 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`，build 時會預先渲染 `/screener`。
+
+### P4
+
+1. `npm test`：65 個測試通過，新增個股頁計算函式的測試：單季比率、金融業不適用、營收序列、季配息加總。
+2. `npm run e2e`：30 項通過（桌面與手機各 15 項）。新增的項目：
+   - 個股頁各區塊、title、canonical、description、og:image、JSON-LD
+   - 不存在或格式錯誤的代號回傳 404，並且只有一個 noindex
+   - 從選股結果點進個股頁、同產業選股
+   - sitemap 至少 1,500 個個股網址、robots.txt
+   - OG 圖片是 PNG，且帶有 CDN 快取標頭
+3. 狀態碼手動驗證（`npm run build && npm start`）：
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}
+" http://localhost:3000/stocks/2330   # 200
+   curl -s -o /dev/null -w "%{http_code}
+" http://localhost:3000/stocks/9999   # 404
+   ```
+4. Lighthouse（本機正式版）：
+   - 個股頁：SEO 100、無障礙 100、最佳做法 100、效能 85
+   - 選股頁：SEO 100、無障礙 100、最佳做法 100、效能 76

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EMPTY, formatNumber, formatPercent, formatQuarter, formatTwd } from "./format";
+import { EMPTY, formatNumber, formatPercent, formatQuarter, formatTwd, formatYi } from "./format";
 
 describe("formatNumber", () => {
   it("加千分位與固定小數", () => {
@@ -34,6 +34,15 @@ describe("formatTwd", () => {
     expect(formatTwd(999)).toBe("999");
   });
   it("缺值", () => expect(formatTwd(undefined)).toBe(EMPTY));
+});
+
+describe("formatYi", () => {
+  it("固定以億元顯示", () => {
+    expect(formatYi(1.27e12)).toBe("12,700.0");
+    expect(formatYi(9.8992e11)).toBe("9,899.2");
+    expect(formatYi(-3.5e7)).toBe("-0.4");
+    expect(formatYi(null)).toBe(EMPTY);
+  });
 });
 
 describe("formatQuarter", () => {

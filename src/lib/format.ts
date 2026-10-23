@@ -28,6 +28,12 @@ export function formatTwd(v: Num, digits = 2): string {
   return formatNumber(v, 0);
 }
 
+/** 固定以「億元」顯示（同一欄需要比較大小時用，避免兆／億混用）。 */
+export function formatYi(v: Num, digits = 1): string {
+  if (isMissing(v)) return EMPTY;
+  return formatNumber(v / 1e8, digits);
+}
+
 /** 「2026Q2」這類季別標籤。 */
 export function formatQuarter(year: number, quarter: number): string {
   return `${year}Q${quarter}`;

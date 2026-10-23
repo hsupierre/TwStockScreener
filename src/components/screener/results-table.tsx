@@ -2,6 +2,8 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import type { Route } from "next";
+import Link from "next/link";
 import { useRef } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -94,8 +96,13 @@ export function ResultsTable({ rows, columns, sort, onSort }: ResultsTableProps)
                   scope="row"
                   className="sticky left-0 z-10 border-b bg-background px-3 text-left font-normal whitespace-nowrap group-hover:bg-muted"
                 >
-                  <span className="font-mono text-xs text-muted-foreground">{row.code}</span>
-                  <span className="ml-2 font-medium">{row.name}</span>
+                  <Link
+                    href={`/stocks/${row.code}` as Route}
+                    className="hover:underline focus-visible:underline"
+                  >
+                    <span className="font-mono text-xs text-muted-foreground">{row.code}</span>
+                    <span className="ml-2 font-medium">{row.name}</span>
+                  </Link>
                   {row.market === "tpex" && (
                     <Badge variant="outline" className="ml-2 px-1 py-0 text-[10px]">
                       {MARKET_LABELS[row.market as Market]}
