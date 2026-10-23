@@ -315,8 +315,11 @@ export type Database = {
       }
       screen_snapshot: {
         Row: {
+          avg_volume_20d: number | null
           cash_dividend_avg_5y: number | null
           cash_dividend_latest: number | null
+          change: number | null
+          change_pct: number | null
           close: number | null
           code: string
           current_ratio: number | null
@@ -345,11 +348,16 @@ export type Database = {
           revenue_yoy_3m: number | null
           roa_ttm: number | null
           roe_ttm: number | null
+          trade_value: number | null
           updated_at: string
+          volume: number | null
         }
         Insert: {
+          avg_volume_20d?: number | null
           cash_dividend_avg_5y?: number | null
           cash_dividend_latest?: number | null
+          change?: number | null
+          change_pct?: number | null
           close?: number | null
           code: string
           current_ratio?: number | null
@@ -378,11 +386,16 @@ export type Database = {
           revenue_yoy_3m?: number | null
           roa_ttm?: number | null
           roe_ttm?: number | null
+          trade_value?: number | null
           updated_at?: string
+          volume?: number | null
         }
         Update: {
+          avg_volume_20d?: number | null
           cash_dividend_avg_5y?: number | null
           cash_dividend_latest?: number | null
+          change?: number | null
+          change_pct?: number | null
           close?: number | null
           code?: string
           current_ratio?: number | null
@@ -411,7 +424,9 @@ export type Database = {
           revenue_yoy_3m?: number | null
           roa_ttm?: number | null
           roe_ttm?: number | null
+          trade_value?: number | null
           updated_at?: string
+          volume?: number | null
         }
         Relationships: [
           {

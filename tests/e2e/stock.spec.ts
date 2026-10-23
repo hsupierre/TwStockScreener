@@ -16,6 +16,8 @@ test.describe("個股頁", () => {
     expect(await quarterHeaders.count()).toBeGreaterThanOrEqual(5);
     expect(await quarterHeaders.count()).toBeLessThanOrEqual(13);
     await expect(page.getByLabel("近 24 個月營收與年增率")).toBeVisible();
+    await expect(page.getByLabel("成交資訊")).toContainText("成交量");
+    await expect(page.getByLabel("成交資訊")).toContainText("張");
 
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/stocks\/2330$/);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /本益比/);

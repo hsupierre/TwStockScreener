@@ -270,9 +270,13 @@ def load_snapshot_inputs(ctx: Context) -> SnapshotInputs:
     latest = db.select_all("daily_valuation", select="trade_date", order="trade_date.desc", filters={"limit": "1"})
     valuations: list[dict[str, Any]] = []
     if latest:
-        since = date.fromisoformat(latest[0]["trade_date"]) - timedelta(days=14)
+        # 35 天約 24 個交易日：足夠計算 20 日均量，也能在缺資料時往回找估值
+        since = date.fromisoformat(latest[0]["trade_date"]) - timedelta(days=35)
         valuations = db.select_all(
-            "daily_valuation", order="code,trade_date", filters={"trade_date": f"gte.{since.isoformat()}"}
+            "daily_valuation",
+            select="code,trade_date,close,change,volume,trade_value,pe,pb,dividend_yield",
+            order="code,trade_date",
+            filters={"trade_date": f"gte.{since.isoformat()}"},
         )
     since_year = ctx.today.year - 4
     quarters = db.select_all("financials_quarterly", order="code,year,quarter", filters={"year": f"gte.{since_year}"})
@@ -332,6 +336,38 @@ def revalidate(ctx: Context) -> None:
         log.warning("revalidate 失敗：%s", e)
 
 
+# ── 歷史收盤行情（20 日均量需要）───────────────────────────
+
+HISTORY_QUOTES: dict[str, Callable[[Fetcher, date], quotes.Partial]] = {
+    "twse": official.fetch_twse_quotes_on,
+    "tpex": official.fetch_tpex_quotes_on,
+}
+
+
+def load_price_history(ctx: Context, run: Run, days: int) -> None:
+    """回補最近 days 個日曆天的收盤行情（只有行情，不含估值）；非交易日自動略過。"""
+    for host in ("www.twse.com.tw", "www.tpex.org.tw"):
+        ctx.fetcher.set_min_interval(host, 2.0)  # 回補時放慢，對官網比較禮貌
+    known = _known_codes(ctx)
+    trading_days: list[str] = []
+    for offset in range(days, 0, -1):
+        day = ctx.today - timedelta(days=offset)
+        if day.weekday() >= 5:
+            continue
+        rows: list[dict[str, Any]] = []
+        for market in MARKETS:
+            part = quotes.safe(market, "quotes", "official", lambda m=market, d=day: HISTORY_QUOTES[m](ctx.fetcher, d))
+            if part.error or len(part.rows) < quotes.MIN_ROWS[market]:
+                log.info("%s %s 略過（%s）", day, market, part.error or f"只有 {len(part.rows)} 筆")
+                continue
+            rows.extend(quotes.merge_daily(part, None))
+        if rows:
+            run.rows_written += ctx.write("daily_valuation", _only_known(rows, known), "code,trade_date")
+            trading_days.append(day.isoformat())
+    run.details["trading_days"] = len(trading_days)
+    run.as_of = trading_days[-1] if trading_days else None
+
+
 # ── backfill：一次性歷史回補 ─────────────────────────────
 
 
@@ -342,6 +378,7 @@ def run_backfill(
     revenue_months: int,
     dividend_years: int,
     steps: set[str],
+    price_days: int = 45,
 ) -> None:
     if "daily" in steps:
         run_daily(ctx, snapshot=False)
@@ -356,6 +393,9 @@ def run_backfill(
                 idx = latest[0] * 12 + latest[1] - 1 - i
                 months.append((idx // 12, idx % 12 + 1))
             load_revenue_history(ctx, run, sorted(months))
+    if "prices" in steps:
+        with track_run(ctx.db, "backfill-prices", dry_run=ctx.dry_run) as run:
+            load_price_history(ctx, run, price_days)
     if "dividend" in steps:
         with track_run(ctx.db, "backfill-dividend", dry_run=ctx.dry_run) as run:
             load_dividends(ctx, run, list(range(ctx.today.year - dividend_years + 1, ctx.today.year + 1)))

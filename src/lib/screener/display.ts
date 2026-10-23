@@ -17,6 +17,8 @@ export function formatMetric(def: MetricDef, value: number | null): string {
       return formatTwd(value, 0);
     case "count":
       return String(value);
+    case "lots":
+      return formatNumber(value / 1000, 0);
   }
 }
 

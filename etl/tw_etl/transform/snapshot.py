@@ -72,32 +72,44 @@ def group_revenues(rows: Iterable[dict[str, Any]]) -> dict[str, dict[Month, dict
     return out
 
 
-VALUATION_FIELDS = ("close", "change", "volume", "trade_value", "pe", "pb", "dividend_yield")
+# 當日的行情數字：只取最新一個有收盤價的交易日，不沿用舊資料（成交量沿用前一天會誤導）
+QUOTE_FIELDS = ("close", "change", "volume", "trade_value")
+# 估值：逐欄位取最近一筆有值的資料（某天缺估值或降級模式只有收盤價時，沿用最近的數值）
+RATIO_FIELDS = ("pe", "pb", "dividend_yield")
+AVG_VOLUME_DAYS = 20
+AVG_VOLUME_MIN_DAYS = 10
 
 
 def latest_valuations(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """每檔的最新收盤價與估值：每個欄位各自取「最近一筆有值」的資料。
-
-    行情與估值可能來自不同日期或來源（例如 FinMind 降級模式只有收盤價），
-    逐欄位往回找可以避免某一天缺估值時，本益比等數值整個消失。trade_date 為最新一筆有收盤價的日期。
-    """
+    """每檔的最新行情、估值與近 20 個交易日平均成交量。trade_date 為最新一筆有收盤價的日期。"""
     by_code: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
         by_code.setdefault(r["code"], []).append(r)
     out: dict[str, dict[str, Any]] = {}
     for code, items in by_code.items():
         items.sort(key=lambda r: str(r["trade_date"]))
-        merged: dict[str, Any] = {"code": code, "trade_date": None}
+        merged: dict[str, Any] = {"code": code, "trade_date": items[-1]["trade_date"]}
+        priced = [r for r in items if r.get("close") is not None]
+        if priced:
+            latest = priced[-1]
+            merged["trade_date"] = latest["trade_date"]
+            merged.update({f: latest.get(f) for f in QUOTE_FIELDS})
         for r in items:  # 由舊到新，新的值覆蓋舊的
-            for f in VALUATION_FIELDS:
+            for f in RATIO_FIELDS:
                 if r.get(f) is not None:
                     merged[f] = r[f]
-            if r.get("close") is not None:
-                merged["trade_date"] = r["trade_date"]
-        if merged["trade_date"] is None:
-            merged["trade_date"] = items[-1]["trade_date"]
+        volumes = [r["volume"] for r in priced if r.get("volume") is not None][-AVG_VOLUME_DAYS:]
+        merged["avg_volume_20d"] = round(sum(volumes) / len(volumes)) if len(volumes) >= AVG_VOLUME_MIN_DAYS else None
         out[code] = merged
     return out
+
+
+def change_pct(close: float | None, change: float | None) -> float | None:
+    """漲跌幅 = 漲跌 ÷ 前一日收盤價（收盤價 − 漲跌）。"""
+    if close is None or change is None:
+        return None
+    previous = close - change
+    return bounded(change / previous * 100) if previous > 0 else None
 
 
 # ── 季報指標 ─────────────────────────────────────────────
@@ -227,7 +239,8 @@ def dividend_metrics(records: list[dict[str, Any]], today: date, listed_year: in
 
 SNAPSHOT_COLUMNS = [
     "code", "name", "market", "industry", "price_date", "financial_period", "revenue_period",
-    "close", "market_cap", "pe", "pb", "dividend_yield",
+    "close", "change", "change_pct", "volume", "trade_value", "avg_volume_20d",
+    "market_cap", "pe", "pb", "dividend_yield",
     "eps_ttm", "roe_ttm", "roa_ttm", "gross_margin", "operating_margin", "net_margin",
     "revenue_mom", "revenue_yoy", "revenue_cum_yoy", "revenue_yoy_3m", "eps_yoy",
     "revenue_growth_months", "eps_growth_quarters",
@@ -255,6 +268,11 @@ def build_snapshot(inp: SnapshotInputs) -> list[dict[str, Any]]:
                 "industry": c.get("industry"),
                 "price_date": v.get("trade_date"),
                 "close": close,
+                "change": v.get("change"),
+                "change_pct": change_pct(close, v.get("change")),
+                "volume": v.get("volume"),
+                "trade_value": v.get("trade_value"),
+                "avg_volume_20d": v.get("avg_volume_20d"),
                 "market_cap": round(close * shares) if close is not None and shares else None,
                 "pe": v.get("pe"),
                 "pb": v.get("pb"),

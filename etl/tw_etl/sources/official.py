@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from datetime import date
 from typing import Any
 
@@ -84,6 +85,51 @@ def parse_twse_valuations(data: dict[str, Any]) -> Partial:
     return from_rows("twse", "valuations", "official", items)
 
 
+def _sign(cell: Any) -> int:
+    """MI_INDEX 的「漲跌(+/-)」是 HTML，例如 <p style= color:red>+</p>；價差欄只有絕對值。"""
+    text = re.sub(r"<[^>]+>", "", str(cell or "")).strip()
+    return -1 if text.startswith("-") else 1
+
+
+def parse_twse_mi_index(data: dict[str, Any]) -> Partial:
+    """MI_INDEX（type=ALLBUT0999）：可以指定日期查詢歷史收盤行情，用於回補。"""
+    if str(data.get("stat", "")).upper() != "OK":
+        raise ValueError(f"證交所 MI_INDEX 沒有資料：stat={data.get('stat')!r}")
+    table = next(
+        (t for t in data.get("tables", []) if {"證券代號", "收盤價"} <= set(t.get("fields") or [])),
+        None,
+    )
+    if table is None:
+        raise ValueError("證交所 MI_INDEX 找不到每日收盤行情表")
+    day = ad_date(data.get("date"))
+    idx = _index(table["fields"])
+    items = []
+    for r in table["data"]:
+        magnitude = to_float(_get(r, idx, "漲跌價差"))
+        items.append(
+            (
+                str(_get(r, idx, "證券代號") or ""),
+                day,
+                {
+                    "close": positive_or_none(_get(r, idx, "收盤價")),
+                    "change": None if magnitude is None else _sign(_get(r, idx, "漲跌(+/-)")) * magnitude,
+                    "volume": to_int(_get(r, idx, "成交股數")),
+                    "trade_value": to_int(_get(r, idx, "成交金額")),
+                },
+            )
+        )
+    return from_rows("twse", "quotes", "official", items)
+
+
+def fetch_twse_quotes_on(f: Fetcher, day: date) -> Partial:
+    """指定日期的上市收盤行情（STOCK_DAY_ALL 會忽略日期參數，所以改用 MI_INDEX）。"""
+    return parse_twse_mi_index(
+        f.get_json(
+            f"{TWSE_WEB}/MI_INDEX", params={"date": day.strftime("%Y%m%d"), "type": "ALLBUT0999", "response": "json"}
+        )
+    )
+
+
 def fetch_twse_quotes(f: Fetcher) -> Partial:
     return parse_twse_quotes(f.get_text(f"{TWSE_WEB}/STOCK_DAY_ALL?response=json", encoding="utf-8"))
 
@@ -140,6 +186,13 @@ def parse_tpex_valuations(data: dict[str, Any]) -> Partial:
 
 def fetch_tpex_quotes(f: Fetcher) -> Partial:
     return parse_tpex_quotes(f.get_json(f"{TPEX_WEB}/otc", params={"type": "EW", "response": "json"}))
+
+
+def fetch_tpex_quotes_on(f: Fetcher, day: date) -> Partial:
+    """指定日期的上櫃收盤行情；非交易日回傳 0 筆（Partial.error）。"""
+    return parse_tpex_quotes(
+        f.get_json(f"{TPEX_WEB}/otc", params={"date": day.strftime("%Y/%m/%d"), "type": "EW", "response": "json"})
+    )
 
 
 def fetch_tpex_valuations(f: Fetcher) -> Partial:

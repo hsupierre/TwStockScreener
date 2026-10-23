@@ -47,6 +47,10 @@ describe("inRange", () => {
     expect(inRange(9.99, { min: 10, max: null })).toBe(false);
   });
   it("缺值一律不符合", () => expect(inRange(null, { min: null, max: 100 })).toBe(false));
+  it("成交量以張輸入（1 張 = 1,000 股）", () => {
+    expect(inRange(883_284, { min: 500, max: null }, 1000)).toBe(true);
+    expect(inRange(883_284, { min: 1000, max: null }, 1000)).toBe(false);
+  });
   it("依 scale 換算單位（市值以億輸入）", () => {
     expect(inRange(2e11, { min: 1000, max: 3000 }, 1e8)).toBe(true);
     expect(inRange(2e11, { min: 3000, max: null }, 1e8)).toBe(false);

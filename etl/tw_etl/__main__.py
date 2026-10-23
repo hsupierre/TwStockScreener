@@ -5,7 +5,8 @@
     python -m tw_etl quarterly [--years 2025 2026]
     python -m tw_etl dividends [--years 2025 2026]   # 董事會決議年度
     python -m tw_etl snapshot               # 只重算快照
-    python -m tw_etl backfill --from-year 2023 --revenue-months 36 --dividend-years 10
+    python -m tw_etl backfill --from-year 2023 --revenue-months 36 --dividend-years 10 --price-days 45
+    python -m tw_etl backfill --steps prices          # 只回補收盤行情（20 日均量）
     python -m tw_etl verify-margins         # 與官方「營益分析」交叉比對
 
 所有指令都支援 --dry-run（抓取與計算，但不寫入資料庫）與 -v，放在子指令之後，例如 `daily --dry-run`。
@@ -25,7 +26,7 @@ from .load.supabase import Supabase
 from .runs import RECORDED, render_summary
 from .verify import verify_margins
 
-BACKFILL_STEPS = ("daily", "quarterly", "revenue", "dividend")
+BACKFILL_STEPS = ("daily", "quarterly", "revenue", "dividend", "prices")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--from-year", type=int, default=2023)
     b.add_argument("--revenue-months", type=int, default=36)
     b.add_argument("--dividend-years", type=int, default=10)
+    b.add_argument("--price-days", type=int, default=45, help="回補最近幾個日曆天的收盤行情")
     b.add_argument("--steps", nargs="+", choices=BACKFILL_STEPS, default=list(BACKFILL_STEPS))
     sub.add_parser("verify-margins", parents=[common])
     return p
@@ -111,6 +113,7 @@ def _run(args: argparse.Namespace, settings: Settings, db: Supabase) -> int:
                     revenue_months=args.revenue_months,
                     dividend_years=args.dividend_years,
                     steps=set(args.steps),
+                    price_days=args.price_days,
                 )
             case "verify-margins":
                 return verify_margins(ctx)

@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { EpsChart, RevenueChart } from "@/components/stock/lazy-charts";
 import { DividendTable, QuarterlyTable } from "@/components/stock/financial-tables";
 import { KeyMetrics } from "@/components/stock/key-metrics";
+import { PriceSummary } from "@/components/stock/price-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getSiteUrl } from "@/lib/env";
@@ -153,12 +154,7 @@ export default async function StockPage({ params }: PageProps<"/stocks/[code]">)
           </div>
         </div>
         <div className="flex items-end gap-4">
-          {snapshot?.close != null && (
-            <p className="text-right">
-              <span className="tabular block text-3xl font-semibold">{formatNumber(snapshot.close, 2)}</span>
-              <span className="text-xs text-muted-foreground">收盤價（{snapshot.price_date}）</span>
-            </p>
-          )}
+          {snapshot && <PriceSummary snapshot={snapshot} />}
           {company.industry && (
             <Button asChild variant="outline" size="sm">
               <Link href={screenerHref({ ind: [company.industry] }) as Route}>同產業選股</Link>

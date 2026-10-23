@@ -47,6 +47,9 @@ describe("formatMetric / trendClass", () => {
     expect(formatMetric(METRIC_BY_KEY.market_cap, 6.27e13)).toBe("63 兆");
     expect(formatMetric(METRIC_BY_KEY.dividend_streak_years, 10)).toBe("10");
     expect(formatMetric(METRIC_BY_KEY.gross_margin, null)).toBe("—");
+    expect(formatMetric(METRIC_BY_KEY.volume, 883_284)).toBe("883"); // 張
+    expect(formatMetric(METRIC_BY_KEY.avg_volume_20d, 29_796_590)).toBe("29,797");
+    expect(formatMetric(METRIC_BY_KEY.change_pct, -1.31)).toBe("-1.3%");
   });
   it("成長類正紅負綠，其他指標不上色", () => {
     expect(trendClass(METRIC_BY_KEY.revenue_yoy, 5)).toBe("text-up");

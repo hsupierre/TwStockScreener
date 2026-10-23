@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 export function KeyMetrics({ snapshot }: { snapshot: StockRow }) {
   return (
     <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-      {METRIC_GROUPS.map((group) => (
+      {/* 交易類指標顯示在頁首的股價區塊 */}
+      {METRIC_GROUPS.filter((g) => g.id !== "trading").map((group) => (
         <section key={group.id} aria-labelledby={`metrics-${group.id}`} className="rounded-lg border p-4">
           <h3 id={`metrics-${group.id}`} className="mb-3 text-sm font-medium text-muted-foreground">
             {group.label}
