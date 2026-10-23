@@ -16,7 +16,7 @@ from datetime import date
 from typing import Any
 
 from ..http import Fetcher
-from ..parse import ad_date, normalize_header, positive_or_none, roc_date, to_float, to_int
+from ..parse import ad_date, is_common_stock, normalize_header, positive_or_none, roc_date, to_float, to_int
 from .quotes import Partial, from_rows
 
 TWSE_WEB = "https://www.twse.com.tw/rwd/zh/afterTrading"
@@ -171,28 +171,47 @@ def fetch_twse_odd(f: Fetcher, day: date | None = None) -> Partial:
     )
 
 
-def parse_twse_block(data: dict[str, Any]) -> Partial:
-    """鉅額交易（BFIAUU）：同一檔可能有配對、逐筆等多筆，加總。"""
-    if str(data.get("stat", "")).upper() != "OK":
-        raise ValueError(f"證交所鉅額交易沒有資料：stat={data.get('stat')!r}")
-    day = ad_date(data.get("date"))
-    idx = _index(data["fields"])
+def parse_twse_block(single: dict[str, Any], *baskets: dict[str, Any]) -> Partial:
+    """鉅額交易（BFIAUU）：單一證券＋各筆股票組合的成分明細，同一檔有多筆時加總。
+
+    股票組合要另外扣：例如 2330 在 2026-10-22 有一筆 26 檔的組合交易，含 21,000 股台積電。
+    """
+    if str(single.get("stat", "")).upper() != "OK":
+        raise ValueError(f"證交所鉅額交易沒有資料：stat={single.get('stat')!r}")
+    day = ad_date(single.get("date"))
     totals: dict[str, dict[str, int]] = {}
-    for r in data.get("data") or []:
-        code = str(_get(r, idx, "證券代號") or "").strip()
-        acc = totals.setdefault(code, {"block_volume": 0, "block_trade_value": 0})
-        acc["block_volume"] += to_int(_get(r, idx, "成交股數")) or 0
-        acc["block_trade_value"] += to_int(_get(r, idx, "成交金額")) or 0
-    if not totals:  # 當天沒有任何鉅額交易：回傳空的成功結果（每檔記為 0）
+    for data in (single, *baskets):
+        if ad_date(data.get("date")) != day:
+            raise ValueError(f"證交所鉅額交易日期不一致：{single.get('date')} / {data.get('date')}")
+        idx = _index(data["fields"])
+        for r in data.get("data") or []:
+            code = str(_get(r, idx, "證券代號") or "").strip()
+            acc = totals.setdefault(code, {"block_volume": 0, "block_trade_value": 0})
+            acc["block_volume"] += to_int(_get(r, idx, "成交股數", "成交量")) or 0
+            acc["block_trade_value"] += to_int(_get(r, idx, "成交金額", "成交值")) or 0
+    rows = {c: v for c, v in totals.items() if is_common_stock(c)}
+    if not rows:  # 當天沒有任何鉅額交易：回傳空的成功結果（每檔記為 0）
         return Partial("twse", "block", "official", trade_date=day, rows={})
-    return from_rows("twse", "block", "official", ((c, day, v) for c, v in totals.items()))
+    return from_rows("twse", "block", "official", ((c, day, v) for c, v in rows.items()))
+
+
+BLOCK_URL = "https://www.twse.com.tw/rwd/zh/block/BFIAUU"
 
 
 def fetch_twse_block(f: Fetcher, day: date | None = None) -> Partial:
-    params = {"selectType": "S", "response": "json"}
+    """單一證券（selectType=S）＋股票組合（selectType=M，每筆組合再用 sub/buyNo 查成分）。"""
+    params: dict[str, Any] = {"response": "json"}
     if day:
         params["date"] = day.strftime("%Y%m%d")
-    return parse_twse_block(f.get_json("https://www.twse.com.tw/rwd/zh/block/BFIAUU", params=params))
+    single = f.get_json(BLOCK_URL, params={**params, "selectType": "S"})
+    combo = f.get_json(BLOCK_URL, params={**params, "selectType": "M"})
+    baskets = []
+    if str(combo.get("stat", "")).upper() == "OK":
+        for r in combo.get("data") or []:
+            if isinstance(r[1], dict):  # 合計列的第 2 欄是空字串
+                keys = {k: str(r[1][k]) for k in ("sub", "stockType", "buyNo", "date")}
+                baskets.append(f.get_json(BLOCK_URL, params={"response": "json", **keys}))
+    return parse_twse_block(single, *baskets)
 
 
 # ── 上櫃 ─────────────────────────────────────────────────

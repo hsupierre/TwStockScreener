@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from tw_etl.sources.official import parse_twse_block, parse_twse_odd
+from tw_etl.sources.official import fetch_twse_block, parse_twse_block, parse_twse_odd
 from tw_etl.sources.quotes import Partial, merge_daily
 from tw_etl.transform.snapshot import board_lot, latest_valuations
 
@@ -119,3 +119,57 @@ def test_block_trades_are_excluded_like_other_sites():
     for r in rows:
         r["trade_date"] = r["trade_date"].isoformat()
     assert latest_valuations(rows)["1316"]["volume"] == 994_000
+
+
+def test_parse_twse_block_adds_basket_constituents():
+    # 2330 2026-10-22：單一證券 2,136,000 股＋股票組合 21,000 股；29,796,590 − 4,889,590 − 2,157,000 = 22,750 張
+    single = block_json([["2330", "台積電", "配對交易", "2,385.00", "2,136,000", "5,113,372,530"]])
+    basket = {
+        "stat": "OK",
+        "date": "20261022",
+        "fields": ["證券代號", "證券名稱", "成交價", "成交量", "成交值"],
+        "data": [
+            ["2330", "台積電", "2,385.00", "21,000", "50,085,000"],
+            ["2317", "鴻海", "245.00", "14,000", "3,430,000"],
+            ["總計", "", "", "273,000", "99,207,500"],
+        ],
+    }
+    p = parse_twse_block(single, basket)
+    assert p.rows["2330"]["block_volume"] == 2_157_000
+    assert p.rows["2317"] == {"block_volume": 14_000, "block_trade_value": 3_430_000}
+    assert "總計" not in p.rows
+    assert board_lot(29_796_590, 4_889_590, p.rows["2330"]["block_volume"]) == 22_750_000
+
+    with pytest.raises(ValueError, match="日期不一致"):
+        parse_twse_block(single, {**basket, "date": "20261021"})
+
+
+def test_fetch_twse_block_queries_each_basket():
+    calls: list[dict] = []
+    combo = {
+        "stat": "OK",
+        "date": "20261022",
+        "fields": ["序號", "資料內容", "交易別", "股票種數", "成交總股數", "成交總金額"],
+        "data": [
+            [1, {"sub": 1, "stockType": "2", "buyNo": "1480F5001", "date": "20261022"}, "配對交易", 26, "273,000", "1"],
+            ["總計", "", "", "", "273,000", "1"],
+        ],
+    }
+    detail = {
+        "stat": "OK",
+        "date": "20261022",
+        "fields": ["證券代號", "成交量", "成交值"],
+        "data": [["2330", "21,000", "1"]],
+    }
+
+    class FakeFetcher:
+        def get_json(self, url, params):
+            calls.append(params)
+            if "sub" in params:
+                return detail
+            return combo if params["selectType"] == "M" else block_json([])
+
+    p = fetch_twse_block(FakeFetcher(), D)  # type: ignore[arg-type]
+    assert p.rows["2330"]["block_volume"] == 21_000
+    assert calls[-1] == {"response": "json", "sub": "1", "stockType": "2", "buyNo": "1480F5001", "date": "20261022"}
+    assert len(calls) == 3
