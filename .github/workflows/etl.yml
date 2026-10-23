@@ -67,6 +67,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
           REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          # 選填：有 token 時 FinMind 降級模式的額度較高（約 600 次／小時）
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           COMMAND: ${{ steps.cmd.outputs.command }}
           ARGS: ${{ inputs.args }}
         # ARGS 刻意不加引號，讓多個參數分開傳入；來源只有 workflow_dispatch（需要 repo 寫入權限）

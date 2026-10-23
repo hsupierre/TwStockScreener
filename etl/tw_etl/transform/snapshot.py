@@ -72,13 +72,31 @@ def group_revenues(rows: Iterable[dict[str, Any]]) -> dict[str, dict[Month, dict
     return out
 
 
+VALUATION_FIELDS = ("close", "change", "volume", "trade_value", "pe", "pb", "dividend_yield")
+
+
 def latest_valuations(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """每檔取最新交易日；同一天若行情與估值分開，以有收盤價的為主。"""
-    out: dict[str, dict[str, Any]] = {}
+    """每檔的最新收盤價與估值：每個欄位各自取「最近一筆有值」的資料。
+
+    行情與估值可能來自不同日期或來源（例如 FinMind 降級模式只有收盤價），
+    逐欄位往回找可以避免某一天缺估值時，本益比等數值整個消失。trade_date 為最新一筆有收盤價的日期。
+    """
+    by_code: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
-        cur = out.get(r["code"])
-        if cur is None or str(r["trade_date"]) > str(cur["trade_date"]):
-            out[r["code"]] = r
+        by_code.setdefault(r["code"], []).append(r)
+    out: dict[str, dict[str, Any]] = {}
+    for code, items in by_code.items():
+        items.sort(key=lambda r: str(r["trade_date"]))
+        merged: dict[str, Any] = {"code": code, "trade_date": None}
+        for r in items:  # 由舊到新，新的值覆蓋舊的
+            for f in VALUATION_FIELDS:
+                if r.get(f) is not None:
+                    merged[f] = r[f]
+            if r.get("close") is not None:
+                merged["trade_date"] = r["trade_date"]
+        if merged["trade_date"] is None:
+            merged["trade_date"] = items[-1]["trade_date"]
+        out[code] = merged
     return out
 
 

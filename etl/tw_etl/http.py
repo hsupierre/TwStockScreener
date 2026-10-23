@@ -55,6 +55,7 @@ class Fetcher:
         self._backoff = backoff
         self._sleep = sleep
         self._last_request: dict[str, float] = {}
+        self._intervals: dict[str, float] = dict(MIN_INTERVAL)
 
     def close(self) -> None:
         self._client.close()
@@ -66,7 +67,7 @@ class Fetcher:
         self.close()
 
     def _throttle(self, host: str) -> None:
-        wait = MIN_INTERVAL.get(host, DEFAULT_INTERVAL) - (time.monotonic() - self._last_request.get(host, 0.0))
+        wait = self._intervals.get(host, DEFAULT_INTERVAL) - (time.monotonic() - self._last_request.get(host, 0.0))
         if wait > 0:
             self._sleep(wait)
         self._last_request[host] = time.monotonic()
@@ -102,8 +103,12 @@ class Fetcher:
                 raise FetchError(f"{method} {url} → HTTP {e.response.status_code}") from e
         raise FetchError(f"{method} {url} 重試 {self._retries} 次仍失敗：{last_error}")
 
-    def get_json(self, url: str, params: dict[str, Any] | None = None) -> Any:
-        resp = self._request("GET", url, params=params)
+    def set_min_interval(self, host: str, seconds: float) -> None:
+        """調整單一主機的最短請求間隔（例如依 FinMind 的額度）。"""
+        self._intervals[host] = seconds
+
+    def get_json(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
+        resp = self._request("GET", url, params=params, headers=headers)
         try:
             return resp.json()
         except ValueError as e:

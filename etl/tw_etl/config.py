@@ -32,6 +32,7 @@ class Settings:
     service_key: str
     site_url: str | None = None
     revalidate_secret: str | None = None
+    finmind_token: str | None = None
 
     @classmethod
     def from_env(cls, env_file: Path | None = REPO_ROOT / ".env.local") -> Settings:
@@ -47,4 +48,5 @@ class Settings:
             service_key=key,
             site_url=(env.get("NEXT_PUBLIC_SITE_URL") or "").rstrip("/") or None,
             revalidate_secret=env.get("REVALIDATE_SECRET") or None,
+            finmind_token=env.get("FINMIND_TOKEN") or None,
         )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -13,7 +14,7 @@ from .config import Settings
 from .http import Fetcher
 from .load.supabase import Supabase, in_filter
 from .runs import Run, track_run
-from .sources import mops, openapi
+from .sources import finmind, mops, official, openapi, quotes
 from .transform.financials import merge_statements, to_single_quarter
 from .transform.snapshot import (
     SanityError,
@@ -60,6 +61,50 @@ def _only_known(rows: list[dict[str, Any]], known: set[str]) -> list[dict[str, A
 
 # ── daily：公司基本資料、行情、估值 ─────────────────────────
 
+# 每個市場、每種資料的來源，依優先順序排列（日期相同時取前面的）
+DAILY_SOURCES: dict[tuple[str, quotes.Kind], list[tuple[quotes.Source, Callable[[Fetcher], quotes.Partial]]]] = {
+    ("twse", "quotes"): [("official", official.fetch_twse_quotes), ("openapi", openapi.fetch_twse_quotes)],
+    ("twse", "valuations"): [("official", official.fetch_twse_valuations), ("openapi", openapi.fetch_twse_valuations)],
+    ("tpex", "quotes"): [("official", official.fetch_tpex_quotes), ("openapi", openapi.fetch_tpex_quotes)],
+    ("tpex", "valuations"): [("official", official.fetch_tpex_valuations), ("openapi", openapi.fetch_tpex_valuations)],
+}
+# FinMind 免費額度有限，降級模式只補市值最大的這些股票
+FINMIND_MAX_STOCKS = 300
+
+
+def collect_market_daily(
+    f: Fetcher, market: str
+) -> tuple[quotes.Partial | None, quotes.Partial | None, dict[str, Any]]:
+    """抓所有來源，各自挑出日期最新且筆數合理的行情與估值；回傳選擇結果與報告（寫入 etl_runs.details）。"""
+    chosen: dict[str, quotes.Partial | None] = {}
+    report: dict[str, Any] = {}
+    for kind in ("quotes", "valuations"):
+        candidates = [
+            quotes.safe(market, kind, source, lambda fn=fn: fn(f))  # type: ignore[misc]
+            for source, fn in DAILY_SOURCES[(market, kind)]
+        ]
+        pick = quotes.choose(candidates, quotes.MIN_ROWS[market])
+        chosen[kind] = pick
+        report[kind] = {
+            "source": pick.source if pick else None,
+            "date": pick.trade_date.isoformat() if pick and pick.trade_date else None,
+            "candidates": [c.summary() for c in candidates],
+        }
+        log.info("%s %s → %s", market, kind, " / ".join(report[kind]["candidates"]))
+    return chosen["quotes"], chosen["valuations"], report
+
+
+def finmind_degraded(ctx: Context, market: str, known: set[str]) -> list[dict[str, Any]]:
+    """官網與 OpenAPI 都失敗時，依上一份快照的市值排序，逐檔向 FinMind 補最新收盤價。"""
+    ranked = ctx.db.select_all(
+        "screen_snapshot",
+        select="code,market_cap",
+        order="market_cap.desc.nullslast,code",
+        filters={"market": f"eq.{market}"},
+    )
+    codes = [r["code"] for r in ranked if r["code"] in known][:FINMIND_MAX_STOCKS]
+    return finmind.fill_prices(ctx.fetcher, codes, ctx.today - timedelta(days=10), ctx.settings.finmind_token)
+
 
 def run_daily(ctx: Context, *, snapshot: bool = True) -> None:
     with track_run(ctx.db, "daily", dry_run=ctx.dry_run) as run:
@@ -79,7 +124,21 @@ def run_daily(ctx: Context, *, snapshot: bool = True) -> None:
                 {"is_active": False},
             )
 
-        daily = _only_known(openapi.fetch_daily(ctx.fetcher), {c["code"] for c in companies})
+        known = {c["code"] for c in companies}
+        daily: list[dict[str, Any]] = []
+        for market in MARKETS:
+            quote, valuation, report = collect_market_daily(ctx.fetcher, market)
+            run.details[market] = report
+            if quote is None:
+                log.error("%s 行情：官網與 OpenAPI 都不可用，改用 FinMind 降級模式", market)
+                filled = finmind_degraded(ctx, market, known)
+                report["finmind"] = len(filled)
+                run.details["degraded"] = True
+                daily.extend(filled)
+            daily.extend(quotes.merge_daily(quote, valuation))
+        daily = _only_known(daily, known)
+        if not daily:
+            raise SanityError("上市、上櫃行情都無法取得（官網、OpenAPI、FinMind 皆失敗）")
         run.rows_written += ctx.write("daily_valuation", daily, "code,trade_date")
         run.details["daily_valuation"] = len(daily)
         run.as_of = max(r["trade_date"] for r in daily).isoformat() if daily else None

@@ -68,7 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     db = Supabase(settings.supabase_url, settings.service_key)
     try:
-        return _run(args, settings, db)
+        code = _run(args, settings, db)
+        if any(r.details.get("degraded") for r in RECORDED):
+            # 資料已用備援寫入，但以失敗結束，讓 GitHub Actions 寄出通知
+            logging.error("本次使用 FinMind 降級模式：官網與 OpenAPI 都無法取得部分市場的行情")
+            return 3
+        return code
     finally:
         db.close()
         if summary_path := os.environ.get("GITHUB_STEP_SUMMARY"):

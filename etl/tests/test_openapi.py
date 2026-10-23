@@ -1,6 +1,12 @@
 from datetime import date
 
-from tw_etl.sources.openapi import map_daily, map_revenue, map_tpex_company, map_twse_company
+from tw_etl.sources.openapi import (
+    map_revenue,
+    map_tpex_company,
+    map_twse_company,
+    tpex_quotes,
+    twse_valuations,
+)
 
 
 def test_map_twse_company():
@@ -36,32 +42,22 @@ def test_map_tpex_company_and_skip_non_common_stock():
     assert map_tpex_company({"SecuritiesCompanyCode": "00878"}) is None
 
 
-def test_map_daily_merges_quote_and_valuation_by_code_and_date():
-    rows = map_daily(
-        twse_quotes=[{"Code": "2330", "Date": "1151019", "ClosingPrice": "2420.00", "Change": "0.0000"}],
-        twse_valuations=[
-            {"Code": "2330", "Date": "1151019", "PEratio": "28.05", "DividendYield": "0.91", "PBratio": "9.76"}
-        ],
-        tpex_quotes=[
+def test_openapi_quotes_and_valuations_keep_latest_day_and_common_stocks():
+    q = tpex_quotes(
+        [
             {"SecuritiesCompanyCode": "6488", "Date": "1151020", "Close": "844.00", "Change": "-38.00 "},
+            {"SecuritiesCompanyCode": "6488", "Date": "1151019", "Close": "882.00"},  # 較舊的日期會被捨棄
             {"SecuritiesCompanyCode": "700001", "Date": "1151020", "Close": "1.00"},  # 權證
             {"SecuritiesCompanyCode": "6499", "Date": "1151020", "Close": "---"},  # 無成交
-        ],
-        tpex_valuations=[{"SecuritiesCompanyCode": "6488", "Date": "1151020", "PriceEarningRatio": "0.00"}],
+        ]
     )
-    by_code = {r["code"]: r for r in rows}
-    assert set(by_code) == {"2330", "6488"}
-    assert by_code["2330"] == {
-        "code": "2330",
-        "trade_date": date(2026, 10, 19),
-        "close": 2420.0,
-        "change": 0.0,
-        "pe": 28.05,
-        "pb": 9.76,
-        "dividend_yield": 0.91,
-    }
-    assert by_code["6488"]["change"] == -38.0
-    assert "pe" not in by_code["6488"]  # 本益比 0 代表不適用
+    assert (q.market, q.kind, q.source, q.trade_date) == ("tpex", "quotes", "openapi", date(2026, 10, 20))
+    assert q.rows == {"6488": {"close": 844.0, "change": -38.0}}
+
+    v = twse_valuations(
+        [{"Code": "2330", "Date": "1151019", "PEratio": "28.05", "DividendYield": "0.91", "PBratio": "0"}]
+    )
+    assert v.rows == {"2330": {"pe": 28.05, "dividend_yield": 0.91}}  # 淨值比 0 代表不適用
 
 
 def test_map_revenue():

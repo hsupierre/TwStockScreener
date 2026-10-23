@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 from ..http import Fetcher
@@ -22,6 +21,7 @@ from ..parse import (
     to_float,
     to_int,
 )
+from .quotes import Partial, from_rows
 
 TWSE = "https://openapi.twse.com.tw/v1"
 TPEX = "https://www.tpex.org.tw/openapi/v1"
@@ -87,79 +87,105 @@ def fetch_companies(f: Fetcher) -> list[dict[str, Any]]:
     return list(out.values())
 
 
-# ── 每日行情與估值 ───────────────────────────────────────
+# ── 每日行情與估值（備援來源；主要來源見 sources/official.py）─────────
 
 
-def _merge(target: dict[tuple[str, date], dict[str, Any]], code: str | None, day: date | None, values: dict) -> None:
-    if not is_common_stock(code) or day is None:
-        return
-    values = {k: v for k, v in values.items() if v is not None}
-    if not values:
-        return
-    row = target.setdefault((code, day), {"code": code, "trade_date": day})  # type: ignore[arg-type]
-    row.update(values)
-
-
-def map_daily(
-    twse_quotes: list[dict], twse_valuations: list[dict], tpex_quotes: list[dict], tpex_valuations: list[dict]
-) -> list[dict[str, Any]]:
-    rows: dict[tuple[str, date], dict[str, Any]] = {}
-    for r in twse_quotes:
-        _merge(
-            rows,
-            _s(r.get("Code")),
-            roc_date(r.get("Date")),
-            {
-                "close": positive_or_none(r.get("ClosingPrice")),
-                "change": to_float(r.get("Change")),
-                "volume": to_int(r.get("TradeVolume")),
-                "trade_value": to_int(r.get("TradeValue")),
-            },
-        )
-    for r in tpex_quotes:
-        _merge(
-            rows,
-            _s(r.get("SecuritiesCompanyCode")),
-            roc_date(r.get("Date")),
-            {
-                "close": positive_or_none(r.get("Close")),
-                "change": to_float(r.get("Change")),
-                "volume": to_int(r.get("TradingShares")),
-                "trade_value": to_int(r.get("TransactionAmount")),
-            },
-        )
-    for r in twse_valuations:
-        _merge(
-            rows,
-            _s(r.get("Code")),
-            roc_date(r.get("Date")),
-            {
-                "pe": positive_or_none(r.get("PEratio")),
-                "pb": positive_or_none(r.get("PBratio")),
-                "dividend_yield": to_float(r.get("DividendYield")),
-            },
-        )
-    for r in tpex_valuations:
-        _merge(
-            rows,
-            _s(r.get("SecuritiesCompanyCode")),
-            roc_date(r.get("Date")),
-            {
-                "pe": positive_or_none(r.get("PriceEarningRatio")),
-                "pb": positive_or_none(r.get("PriceBookRatio")),
-                "dividend_yield": to_float(r.get("YieldRatio")),
-            },
-        )
-    return list(rows.values())
-
-
-def fetch_daily(f: Fetcher) -> list[dict[str, Any]]:
-    return map_daily(
-        f.get_json(f"{TWSE}/exchangeReport/STOCK_DAY_ALL"),
-        f.get_json(f"{TWSE}/exchangeReport/BWIBBU_ALL"),
-        f.get_json(f"{TPEX}/tpex_mainboard_daily_close_quotes"),
-        f.get_json(f"{TPEX}/tpex_mainboard_peratio_analysis"),
+def twse_quotes(rows: list[dict[str, Any]]) -> Partial:
+    return from_rows(
+        "twse",
+        "quotes",
+        "openapi",
+        (
+            (
+                _s(r.get("Code")),
+                roc_date(r.get("Date")),
+                {
+                    "close": positive_or_none(r.get("ClosingPrice")),
+                    "change": to_float(r.get("Change")),
+                    "volume": to_int(r.get("TradeVolume")),
+                    "trade_value": to_int(r.get("TradeValue")),
+                },
+            )
+            for r in rows
+        ),
     )
+
+
+def twse_valuations(rows: list[dict[str, Any]]) -> Partial:
+    return from_rows(
+        "twse",
+        "valuations",
+        "openapi",
+        (
+            (
+                _s(r.get("Code")),
+                roc_date(r.get("Date")),
+                {
+                    "pe": positive_or_none(r.get("PEratio")),
+                    "pb": positive_or_none(r.get("PBratio")),
+                    "dividend_yield": to_float(r.get("DividendYield")),
+                },
+            )
+            for r in rows
+        ),
+    )
+
+
+def tpex_quotes(rows: list[dict[str, Any]]) -> Partial:
+    return from_rows(
+        "tpex",
+        "quotes",
+        "openapi",
+        (
+            (
+                _s(r.get("SecuritiesCompanyCode")),
+                roc_date(r.get("Date")),
+                {
+                    "close": positive_or_none(r.get("Close")),
+                    "change": to_float(r.get("Change")),
+                    "volume": to_int(r.get("TradingShares")),
+                    "trade_value": to_int(r.get("TransactionAmount")),
+                },
+            )
+            for r in rows
+        ),
+    )
+
+
+def tpex_valuations(rows: list[dict[str, Any]]) -> Partial:
+    return from_rows(
+        "tpex",
+        "valuations",
+        "openapi",
+        (
+            (
+                _s(r.get("SecuritiesCompanyCode")),
+                roc_date(r.get("Date")),
+                {
+                    "pe": positive_or_none(r.get("PriceEarningRatio")),
+                    "pb": positive_or_none(r.get("PriceBookRatio")),
+                    "dividend_yield": to_float(r.get("YieldRatio")),
+                },
+            )
+            for r in rows
+        ),
+    )
+
+
+def fetch_twse_quotes(f: Fetcher) -> Partial:
+    return twse_quotes(f.get_json(f"{TWSE}/exchangeReport/STOCK_DAY_ALL"))
+
+
+def fetch_twse_valuations(f: Fetcher) -> Partial:
+    return twse_valuations(f.get_json(f"{TWSE}/exchangeReport/BWIBBU_ALL"))
+
+
+def fetch_tpex_quotes(f: Fetcher) -> Partial:
+    return tpex_quotes(f.get_json(f"{TPEX}/tpex_mainboard_daily_close_quotes"))
+
+
+def fetch_tpex_valuations(f: Fetcher) -> Partial:
+    return tpex_valuations(f.get_json(f"{TPEX}/tpex_mainboard_peratio_analysis"))
 
 
 # ── 月營收 ───────────────────────────────────────────────
