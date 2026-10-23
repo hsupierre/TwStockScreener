@@ -5,8 +5,16 @@ const select = vi.fn();
 vi.mock("@/lib/supabase/public", () => ({
   createSupabasePublicClient: () => ({ from: () => ({ select }) }),
 }));
-const enableAndDispatchEtl = vi.fn();
-vi.mock("@/lib/github-actions", () => ({ enableAndDispatchEtl }));
+const checkAndRepair = vi.fn();
+vi.mock("@/lib/github-actions", () => ({
+  checkAndRepair,
+  GitHubActions: class {
+    constructor(
+      readonly repo: string,
+      readonly token: string,
+    ) {}
+  },
+}));
 
 const SECRET = "c".repeat(40);
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
@@ -29,7 +37,7 @@ describe("GET /api/cron/health", () => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
     select.mockReset();
-    enableAndDispatchEtl.mockReset();
+    checkAndRepair.mockReset();
   });
 
   it("沒有或錯誤的密鑰會被拒絕，且不會查詢資料庫", async () => {
@@ -43,7 +51,7 @@ describe("GET /api/cron/health", () => {
     expect((await call()).status).toBe(503);
   });
 
-  it("ETL 正常時只讀取資料庫，不觸發修復", async () => {
+  it("沒有設定權杖時只讀取資料庫", async () => {
     select.mockResolvedValue({
       data: [{ job: "daily", as_of: "2026-10-22", finished_at: hoursAgo(10) }],
       error: null,
@@ -54,32 +62,48 @@ describe("GET /api/cron/health", () => {
       ok: true,
       supabase: "reachable",
       daily: { stale: false },
-      repair: { status: "not-needed" },
+      github: { status: "not-configured" },
     });
-    expect(enableAndDispatchEtl).not.toHaveBeenCalled();
+    expect(checkAndRepair).not.toHaveBeenCalled();
   });
 
-  it("ETL 停擺超過 72 小時時，用設定的權杖重新啟用並觸發", async () => {
+  it("有權杖時每天檢查 workflow，資料是否停擺會傳給修復邏輯", async () => {
     vi.stubEnv("GITHUB_ACTIONS_TOKEN", "gh-token");
     select.mockResolvedValue({
       data: [{ job: "daily", as_of: "2026-10-15", finished_at: hoursAgo(100) }],
       error: null,
     });
-    enableAndDispatchEtl.mockResolvedValue({ status: "dispatched" });
+    checkAndRepair.mockResolvedValue({ workflowState: "active", reenabled: false, dispatched: true });
     const res = await call();
-    expect(enableAndDispatchEtl).toHaveBeenCalledWith("hsupierre/TwStockScreener", "gh-token");
-    expect(res.body).toMatchObject({ ok: true, daily: { stale: true }, repair: { status: "dispatched" } });
+    const [gh, stale] = checkAndRepair.mock.calls[0]!;
+    expect(gh).toMatchObject({ repo: "hsupierre/TwStockScreener", token: "gh-token" });
+    expect(stale).toBe(true);
+    expect(res.body).toMatchObject({ ok: true, daily: { stale: true }, github: { dispatched: true } });
   });
 
-  it("停擺但沒有設定權杖時，回報需要人工處理", async () => {
+  it("停擺但沒有設定權杖時，ok 為 false（需要人工處理）", async () => {
     select.mockResolvedValue({ data: [], error: null });
     const res = await call();
     expect(res.body).toMatchObject({
       ok: false,
       daily: { stale: true },
-      repair: { status: "not-configured" },
+      github: { status: "not-configured" },
     });
-    expect(enableAndDispatchEtl).not.toHaveBeenCalled();
+  });
+
+  it("權杖失效時 ok 為 false，即使資料正常", async () => {
+    vi.stubEnv("GITHUB_ACTIONS_TOKEN", "expired");
+    select.mockResolvedValue({
+      data: [{ job: "daily", as_of: "2026-10-22", finished_at: hoursAgo(5) }],
+      error: null,
+    });
+    checkAndRepair.mockResolvedValue({
+      workflowState: null,
+      reenabled: false,
+      dispatched: false,
+      error: "HTTP 401",
+    });
+    expect((await call()).body).toMatchObject({ ok: false, github: { error: "HTTP 401" } });
   });
 
   it("Supabase 無法連線時回 503", async () => {

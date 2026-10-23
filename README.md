@@ -238,9 +238,11 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 Vercel Cron 每天台灣時間 10:17 呼叫一次（`vercel.json`），跟 GitHub Actions 完全獨立：
 
 1. **讓 Supabase 保持活躍**：每次都讀一次 `data_freshness`。就算 GitHub 排程停了，資料庫每天仍有活動，免費專案不會因為閒置 7 天被暫停。
-2. **自動修復 ETL**：每日 ETL 超過 72 小時沒有執行時，呼叫 GitHub API 重新啟用 `etl.yml`，並立刻觸發一次 `daily`。ETL 完成後會再呼叫 `/api/revalidate` 更新網站。
-   - 72 小時的門檻用的是 ETL 的**實際執行時間**，不是交易日。所以週末（最長約 50 小時）和連假都不會誤判。
-   - 公開 repo 連續 60 天沒有活動時，GitHub 會停用排程。這是最主要的停擺原因。
+2. **檢查 ETL 排程**（有設定 `GITHUB_ACTIONS_TOKEN` 時）：每天讀取一次 `etl.yml` 的狀態，這也順便驗證權杖還有效。
+   - 被 GitHub 因為 60 天沒有活動而停用（`disabled_inactivity`）時，**立刻重新啟用**，資料不會出現空窗。
+   - 每日 ETL 超過 72 小時沒有執行時，**觸發一次** `daily`，完成後會再呼叫 `/api/revalidate` 更新網站。72 小時的門檻用的是 ETL 的實際執行時間，所以週末（最長約 50 小時）和連假都不會誤判。
+   - 你**手動停用**（`disabled_manually`）的排程會被尊重，不會自動重新啟用。
+   - 權杖過期或權限不足時，回應裡的 `ok` 會是 `false`，`github.error` 會寫出原因。
 
 Vercel 環境變數：
 

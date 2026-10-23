@@ -1,13 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { enableAndDispatchEtl } from "@/lib/github-actions";
+import { checkAndRepair, GitHubActions } from "@/lib/github-actions";
 import { evaluateHealth } from "@/lib/health";
 import { createSupabasePublicClient } from "@/lib/supabase/public";
 
 /**
  * 每日健康檢查（Vercel Cron 觸發，見 vercel.json）。與 GitHub Actions 完全獨立：
  *   1. 讀取一次 Supabase：即使 GitHub 排程停擺，資料庫每天仍有活動，避免免費專案因閒置 7 天被暫停。
- *   2. 每日 ETL 超過 72 小時沒有執行時，透過 GitHub API 重新啟用並觸發 ETL（自動修復）。
+ *   2. 有設定 GITHUB_ACTIONS_TOKEN 時，每天檢查 ETL workflow 的狀態（同時驗證權杖）：
+ *      被 GitHub 因 60 天無活動停用時立刻重新啟用；每日 ETL 超過 72 小時沒有執行時觸發一次。
  *
  * Vercel Cron 會帶 Authorization: Bearer <CRON_SECRET>（需在 Vercel 設定 CRON_SECRET）。
  */
@@ -42,20 +43,23 @@ export async function GET(request: Request) {
   const daily = data.find((r) => r.job === "daily");
   const health = evaluateHealth({ dailyFinishedAt: daily?.finished_at ?? null, now: new Date() });
 
-  // 2. ETL 停擺時自動修復
-  let repair: Record<string, unknown> = { status: "not-needed" };
-  if (health.stale) {
-    const token = process.env.GITHUB_ACTIONS_TOKEN;
-    repair = token
-      ? await enableAndDispatchEtl(process.env.GITHUB_REPOSITORY || DEFAULT_REPO, token)
-      : { status: "not-configured" };
-    console.warn("健康檢查：每日 ETL 已停擺", { ageHours: health.ageHours, repair });
+  // 2. 檢查 GitHub workflow，必要時重新啟用或觸發
+  const token = process.env.GITHUB_ACTIONS_TOKEN;
+  const repair = token
+    ? await checkAndRepair(
+        new GitHubActions(process.env.GITHUB_REPOSITORY || DEFAULT_REPO, token),
+        health.stale,
+      )
+    : null;
+  if (health.stale || repair?.reenabled || repair?.error) {
+    console.warn("健康檢查需要注意", { ageHours: health.ageHours, repair });
   }
 
   return json(200, {
-    ok: !health.stale || repair.status === "dispatched",
+    // 資料正常、或已經觸發修復，且權杖可用時才算 ok
+    ok: (!health.stale || repair?.dispatched === true) && !repair?.error,
     supabase: "reachable",
     daily: { asOf: daily?.as_of ?? null, finishedAt: daily?.finished_at ?? null, ...health },
-    repair,
+    github: repair ?? { status: "not-configured" },
   });
 }
