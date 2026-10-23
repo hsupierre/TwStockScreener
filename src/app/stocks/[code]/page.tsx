@@ -3,7 +3,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { EpsChart, RevenueChart } from "@/components/stock/charts";
+import { EpsChart, RevenueChart } from "@/components/stock/lazy-charts";
 import { DividendTable, QuarterlyTable } from "@/components/stock/financial-tables";
 import { KeyMetrics } from "@/components/stock/key-metrics";
 import { Badge } from "@/components/ui/badge";

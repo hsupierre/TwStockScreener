@@ -28,7 +28,13 @@ export function IndustryFilter({ industries, value, onChange }: IndustryFilterPr
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+        <Button
+          variant="outline"
+          role="combobox"
+          // combobox 角色不會以內文當作名稱，需要明確的 aria-label
+          aria-label={value.length === 0 ? "產業：全部" : `產業：${value.join("、")}`}
+          className="w-full justify-between font-normal"
+        >
           <span className="truncate">
             {value.length === 0
               ? "全部產業"
