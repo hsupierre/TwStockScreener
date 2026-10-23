@@ -266,7 +266,7 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 - [x] **P2** ETL 與排程
 - [x] **P3** 選股器
 - [x] **P4** 個股頁與 SEO
-- [ ] **P5** 部署與監控
+- [x] **P5** 部署與監控
 - [ ] **P6** 會員功能
 
 ## 測試方法
@@ -339,3 +339,26 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 4. Lighthouse（本機正式版）：
    - 個股頁：SEO 100、無障礙 100、最佳做法 100、效能 85
    - 選股頁：SEO 100、無障礙 100、最佳做法 100、效能 76
+
+### P5
+
+在正式環境（https://tw-stock-screener-fawn.vercel.app ）驗證：
+
+1. **狀態碼與快取**
+   - 首頁、選股頁、預先產生的個股頁直接由 CDN 提供（HIT），約 0.1 秒。
+   - 沒預先產生的個股頁，第一次開啟約 0.7～1.2 秒，之後都是 HIT。
+   - `/stocks/9999` 回傳 404。
+2. **函式區域**：任何會執行函式的請求，回應標頭 `x-vercel-id` 都應該是 `…::syd1::…`。
+3. **正式網址**：sitemap、canonical、og:image、robots.txt 都使用正式網址。
+4. **快取更新**：在 GitHub Actions 手動執行 ETL `snapshot`。完成後，選股頁 HTML 裡的 `data_freshness` 快照時間，應該要等於 `etl_runs` 最新一筆的 `finished_at`。實測：06:29:29 那次 ETL 完成後，頁面在幾秒內更新。
+5. **revalidate 端點**：
+   - 不帶密鑰回 401。
+   - 帶正確密鑰回 200，之後選股頁先回應 STALE（背景重新產生中），約 10 秒後回到 HIT。
+6. **ETL 失敗**：`etl/tests/test_snapshot_job.py` 驗證失敗時不寫入、不刪除快照。GitHub Actions 失敗時會寄 Email 給 repo 擁有者。
+7. **正式環境 Lighthouse**：
+
+   | 頁面 | 手機效能 | 桌機效能 | 無障礙／最佳做法／SEO |
+   |---|---|---|---|
+   | 首頁 | 94 | 100 | 100／100／100 |
+   | 選股 | 88 | 100 | 100／100／100 |
+   | 個股 | 87～89 | 100 | 100／100／100 |
