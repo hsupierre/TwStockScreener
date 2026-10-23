@@ -64,6 +64,7 @@ export type Database = {
           dividend_yield: number | null
           pb: number | null
           pe: number | null
+          source: string | null
           trade_date: string
           trade_value: number | null
           volume: number | null
@@ -75,6 +76,7 @@ export type Database = {
           dividend_yield?: number | null
           pb?: number | null
           pe?: number | null
+          source?: string | null
           trade_date: string
           trade_value?: number | null
           volume?: number | null
@@ -86,6 +88,7 @@ export type Database = {
           dividend_yield?: number | null
           pb?: number | null
           pe?: number | null
+          source?: string | null
           trade_date?: string
           trade_value?: number | null
           volume?: number | null
