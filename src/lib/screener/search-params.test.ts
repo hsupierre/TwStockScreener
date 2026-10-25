@@ -11,6 +11,10 @@ import {
   presetToState,
   rangesToState,
   screenerHref,
+  describeScreenQuery,
+  sameScreenQuery,
+  screenQuery,
+  screenQueryHref,
   stateToFilters,
 } from "./search-params";
 
@@ -102,5 +106,35 @@ describe("matchPreset", () => {
     const dividend = PRESETS[0]!;
     expect(matchPreset({ ...dividend.ranges, pe: { min: null, max: 10 } }, PRESETS)).toBeUndefined();
     expect(matchPreset({}, PRESETS)).toBeUndefined();
+  });
+});
+
+describe("我的策略的查詢字串", () => {
+  it("screenQuery 只保留選股器的參數，維持原本的寫法", () => {
+    expect(screenQuery("?dy=4~&utm_source=x&roe=8~&ind=%E5%8D%8A%E5%B0%8E%E9%AB%94%E6%A5%AD")).toBe(
+      "dy=4~&roe=8~&ind=%E5%8D%8A%E5%B0%8E%E9%AB%94%E6%A5%AD",
+    );
+    expect(screenQuery("")).toBe("");
+    expect(screenQuery("?broken&%E0=1&q=台積")).toBe("q=台積");
+  });
+
+  it("sameScreenQuery 忽略順序與編碼差異", () => {
+    expect(sameScreenQuery("dy=4~&roe=8~", "roe=8%7E&dy=4%7E")).toBe(true);
+    expect(sameScreenQuery("dy=4~", "dy=5~")).toBe(false);
+    expect(sameScreenQuery("", "utm=1")).toBe(true);
+  });
+
+  it("describeScreenQuery 轉成條列文字", () => {
+    expect(describeScreenQuery("q=台積&m=twse&dy=4~&pe=~15&roe=8~20&ind=半導體業,光電業")).toEqual([
+      "搜尋「台積」",
+      "上市",
+      "半導體業、光電業",
+      "本益比 ≤ 15倍",
+      "殖利率 ≥ 4%",
+      "ROE 8～20%",
+    ]);
+    expect(describeScreenQuery("ind=a,b,c&dy=abc")).toEqual(["3 個產業"]);
+    expect(screenQueryHref("")).toBe("/screener");
+    expect(screenQueryHref("dy=4~")).toBe("/screener?dy=4~");
   });
 });

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSiteUrl } from "@/lib/env";
 import { siteConfig } from "@/lib/site";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
             <SiteHeader />
             <main className="flex-1">{children}</main>
             <SiteFooter />
+            <Toaster position="bottom-center" />
           </TooltipProvider>
         </NuqsAdapter>
       </body>

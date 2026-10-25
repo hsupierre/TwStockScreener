@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { siteConfig } from "@/lib/site";
 
 export function SiteFooter() {
@@ -16,7 +18,12 @@ export function SiteFooter() {
             </a>
           ))}
         </p>
-        <p>© {siteConfig.name}</p>
+        <p className="flex flex-wrap gap-x-4 gap-y-1">
+          <span>© {siteConfig.name}</span>
+          <Link href="/privacy" className="hover:underline">
+            隱私權政策
+          </Link>
+        </p>
       </div>
     </footer>
   );

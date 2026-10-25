@@ -1,6 +1,7 @@
 import { ChartNoAxesColumn } from "lucide-react";
 import Link from "next/link";
 
+import { UserMenu } from "@/components/auth/user-menu";
 import { siteConfig } from "@/lib/site";
 
 import { ThemeMenu } from "./theme-menu";
@@ -22,8 +23,9 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <ThemeMenu />
+          <UserMenu />
         </div>
       </div>
     </header>

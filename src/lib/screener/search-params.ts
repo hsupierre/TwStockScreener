@@ -120,6 +120,68 @@ export function presetHref(preset: Preset): string {
   return screenerHref(base, ranges);
 }
 
+const KNOWN_PARAMS = new Set([...Object.keys(baseParsers), ...Object.keys(rangeParsers)]);
+
+/**
+ * 「我的策略」要儲存的查詢字串：只保留選股器認得的參數，維持原本的寫法（不重新編碼）。
+ * 例如 "?dy=4~&utm_source=x&roe=8~" → "dy=4~&roe=8~"。
+ */
+export function screenQuery(search: string): string {
+  return search
+    .replace(/^\?/, "")
+    .split("&")
+    .filter((pair) => {
+      const key = pair.split("=")[0];
+      if (!key || !pair.includes("=")) return false;
+      try {
+        return KNOWN_PARAMS.has(decodeURIComponent(key));
+      } catch {
+        return false;
+      }
+    })
+    .join("&");
+}
+
+/** 兩個查詢字串的條件是否相同（忽略參數順序與編碼差異，例如 "~" 與 "%7E"）。 */
+export function sameScreenQuery(a: string, b: string): boolean {
+  const canon = (q: string) =>
+    [...new URLSearchParams(screenQuery(q)).entries()]
+      .map(([k, v]) => `${k}=${v}`)
+      .sort()
+      .join("&");
+  return canon(a) === canon(b);
+}
+
+export function screenQueryHref(query: string): string {
+  return query ? `/screener?${query}` : "/screener";
+}
+
+const MARKET_NAMES: Record<string, string> = { twse: "上市", tpex: "上櫃" };
+
+function formatRange(r: Range, unit: string): string {
+  if (r.min !== null && r.max !== null) return `${r.min}～${r.max}${unit}`;
+  return r.min !== null ? `≥ ${r.min}${unit}` : `≤ ${r.max}${unit}`;
+}
+
+/** 把儲存的條件轉成條列文字（策略清單上的摘要），例如 ["殖利率 ≥ 4%", "上市"]。 */
+export function describeScreenQuery(query: string): string[] {
+  const params = new URLSearchParams(query);
+  const out: string[] = [];
+  const q = baseParsers.q.parse(params.get("q") ?? "");
+  if (q) out.push(`搜尋「${q}」`);
+  const markets = baseParsers.m.parse(params.get("m") ?? "") ?? [];
+  if (markets.length) out.push(markets.map((m) => MARKET_NAMES[m] ?? m).join("、"));
+  const industries = baseParsers.ind.parse(params.get("ind") ?? "") ?? [];
+  if (industries.length)
+    out.push(industries.length <= 2 ? industries.join("、") : `${industries.length} 個產業`);
+  for (const m of METRICS) {
+    const raw = params.get(m.param);
+    const r = raw ? parseAsRange.parse(raw) : null;
+    if (r) out.push(`${m.label} ${formatRange(r, m.unit)}`);
+  }
+  return out;
+}
+
 /** 目前的篩選範圍是否剛好等於某個策略模板。 */
 export function matchPreset(ranges: Ranges, presets: readonly Preset[]): Preset | undefined {
   const same = (a: Range | undefined, b: Range | undefined) => a?.min === b?.min && a?.max === b?.max;

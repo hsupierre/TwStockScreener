@@ -6,6 +6,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useRef } from "react";
 
+import { WatchStar } from "@/components/member/watch-button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatMetric, trendClass } from "@/lib/screener/display";
@@ -96,6 +97,7 @@ export function ResultsTable({ rows, columns, sort, onSort }: ResultsTableProps)
                   scope="row"
                   className="sticky left-0 z-10 border-b bg-background px-3 text-left font-normal whitespace-nowrap group-hover:bg-muted"
                 >
+                  <WatchStar code={row.code} name={row.name} />
                   <Link
                     href={`/stocks/${row.code}` as Route}
                     className="hover:underline focus-visible:underline"

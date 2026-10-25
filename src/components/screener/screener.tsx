@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MyScreensMenu } from "@/components/member/my-screens-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { activeRanges, applyFilters, sortRows } from "@/lib/screener/filters";
 import { PRESETS } from "@/lib/screener/presets";
@@ -62,6 +63,7 @@ export function Screener({ snapshot }: ScreenerProps) {
                 </div>
               </SheetContent>
             </Sheet>
+            <MyScreensMenu />
             <ColumnPicker value={columns} onChange={controller.setColumns} />
             <ExportButton rows={results} columns={columns} />
           </div>

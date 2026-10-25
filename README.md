@@ -281,6 +281,39 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://tw-stock-screener-fawn.ver
 - **內容**：重點指標（與選股器使用相同的定義）、24 個月營收與年增率圖、12 季 EPS 圖與季報表（金額固定以億元顯示）、近 10 年股利、公司資料。
 - **連結**：選股結果的股票名稱連到個股頁；個股頁的「同產業選股」會帶入產業條件。
 
+## 會員功能（P6）
+
+- **登入**：只提供 Google 登入（Supabase Auth、PKCE）。Email 登入和通知都需要自有網域才能寄信，之後再加。
+- **自選股**（`/watchlist`）：
+  - 選股結果每一列和個股頁都有 ☆，可以加入或移除。
+  - 自選股頁沿用選股器的表格，可以排序、選欄位、匯出 CSV。
+  - 每人最多 200 檔。
+- **我的策略**（`/strategies`）：
+  - 選股器的「我的策略」選單可以儲存目前的條件，存的是網址上的查詢字串，所以篩選、排序、欄位都會一起保留。也可以從這個選單直接套用。
+  - 管理頁可以看條件摘要、重新命名、刪除。
+  - 每人最多 50 個。
+- **帳號設定**（`/account`）：可以刪除帳號，自選股和策略會一起刪除。另有 `/privacy` 隱私權政策頁。
+
+### 架構：登入狀態只在瀏覽器端處理
+
+- **不使用 proxy（舊稱 middleware）**：如果用 proxy 在伺服器端刷新 session，每次瀏覽都要多跑一次 Vercel Function，個股頁也不能再直接從 CDN 提供。
+- **頁面維持靜態**：所有頁面（包括會員頁）都是靜態的。登入狀態、自選股、策略都由瀏覽器端的 Supabase client 讀寫，相關程式在 `src/lib/auth/session.ts` 和 `src/lib/member/`。
+- **安全性由 RLS 負責**：每張會員資料表都限定 `user_id = auth.uid()`，`user_id` 由資料庫自動帶入，而且不能修改。數量上限由 trigger 檢查。
+- **伺服器只處理一件事**：`/auth/callback` 用網址上的登入碼換取 session，寫入 cookie 後導回原頁面。`next` 參數只接受站內路徑（`src/lib/auth/redirect.ts`）。
+- **刪除帳號**：用 `security definer` 的 `delete_my_account()` 函式，只能刪除呼叫者自己，所以網站伺服器不需要 service_role key。
+
+### 第一次設定（Google 登入）
+
+1. **Google Cloud Console**
+   - 建立專案，在「OAuth 同意畫面」選擇「外部」，填寫應用程式名稱、支援 Email，範圍只要 `email`、`profile`、`openid`。
+   - 填好後按「發布應用程式」，否則只有測試使用者能登入。
+   - 在「憑證」建立 OAuth 用戶端 ID（網頁應用程式）。「已授權的重新導向 URI」填：`https://<project-ref>.supabase.co/auth/v1/callback`。
+2. **Supabase → Authentication → Sign In / Providers → Google**：開啟，填入 Client ID 和 Client Secret。
+3. **Supabase → Authentication → URL Configuration**
+   - Site URL：正式網址。
+   - Redirect URLs：`https://<正式網址>/**` 和 `http://localhost:3000/**`。因為 callback 會帶 `?next=`，所以要用 `**` 萬用字元。
+4. **Email provider 保持開啟**：自動化測試會用 service_role 建立 Email＋密碼的測試帳號。網站上沒有 Email 登入的入口。保持「Confirm email」開啟，未驗證的註冊就無法登入。
+
 ## 資料庫
 
 Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，所有變更都要寫成新的 migration。
@@ -295,6 +328,8 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 | `screen_snapshot` | 選股快照，每檔一列，由 ETL 整批重算 | 公開唯讀 |
 | `data_freshness` | 各資料集最後更新時間 | 公開唯讀 |
 | `etl_runs` | ETL 執行紀錄 | 只有 service_role |
+| `watchlist_items` | 會員的自選股（每人最多 200 檔） | 只有本人（RLS） |
+| `saved_screens` | 會員儲存的選股條件（每人最多 50 個） | 只有本人（RLS） |
 
 慣例：
 
@@ -317,7 +352,8 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 - [x] **P3** 選股器
 - [x] **P4** 個股頁與 SEO
 - [x] **P5** 部署與監控
-- [ ] **P6** 會員功能
+- [x] **P6a** 會員：Google 登入、自選股、我的策略、刪除帳號
+- [ ] **P6b** Email 通知（需要自有網域與 Resend）
 
 ## 測試方法
 
@@ -412,3 +448,25 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
    | 首頁 | 94 | 100 | 100／100／100 |
    | 選股 | 88 | 100 | 100／100／100 |
    | 個股 | 87～89 | 100 | 100／100／100 |
+
+### P6
+
+1. **單元測試**（`npm test`）：瀏覽器端的 Supabase client 會換成記憶體版（`src/test/fake-supabase.ts`），不需要網路。涵蓋：
+   - 登入狀態、登出。
+   - 自選股的樂觀更新、失敗還原、數量上限。
+   - 我的策略的新增、改名、刪除。
+   - `next` 參數防止 open redirect。
+   - `/auth/callback` 的成功和各種失敗。
+2. **RLS 整合測試**（`npm run test:db`，`tests/db/members.test.ts`）：對真實的 Supabase 建立兩個測試帳號 A、B，驗證：
+   - A 和 B 互相看不到、改不到、刪不到對方的資料。
+   - 不能偽造 `user_id`。
+   - 匿名使用者無法存取。
+   - 數量上限和長度限制有效。
+   - `delete_my_account()` 只刪除自己，資料會一起刪除。
+3. **E2E**（`npm run e2e`，`tests/e2e/member.spec.ts`）：
+   - 先用 service_role 建立測試帳號，在 Node 端登入取得 session cookie，再放進瀏覽器。
+   - 實際操作：加入自選 → 自選股頁 → 移除；儲存策略 → 套用 → 刪除；登出；刪除帳號。
+   - 測試結束後會刪除測試帳號。
+4. **手動測試**（正式網站）：
+   - 用自己的 Google 帳號登入，確認頭像選單、自選股、我的策略都正常。
+   - 換一台裝置登入，確認資料同步。

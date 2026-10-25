@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { EpsChart, RevenueChart } from "@/components/stock/lazy-charts";
 import { DividendTable, QuarterlyTable } from "@/components/stock/financial-tables";
+import { WatchButton } from "@/components/member/watch-button";
 import { KeyMetrics } from "@/components/stock/key-metrics";
 import { PriceSummary } from "@/components/stock/price-summary";
 import { Badge } from "@/components/ui/badge";
@@ -155,11 +156,14 @@ export default async function StockPage({ params }: PageProps<"/stocks/[code]">)
         </div>
         <div className="flex items-end gap-4">
           {snapshot && <PriceSummary snapshot={snapshot} />}
-          {company.industry && (
-            <Button asChild variant="outline" size="sm">
-              <Link href={screenerHref({ ind: [company.industry] }) as Route}>同產業選股</Link>
-            </Button>
-          )}
+          <div className="flex flex-col items-end gap-2">
+            <WatchButton code={code} name={company.name} />
+            {company.industry && (
+              <Button asChild variant="outline" size="sm">
+                <Link href={screenerHref({ ind: [company.industry] }) as Route}>同產業選股</Link>
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
