@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import type { ReactNode } from "react";
@@ -50,6 +51,8 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
             <SiteFooter />
             <Toaster position="bottom-center" />
           </TooltipProvider>
+          {/* 匿名流量統計（不使用 cookie）；只在 Vercel 上送出資料，本機開發時只會印在 console */}
+          <Analytics />
         </NuqsAdapter>
       </body>
     </html>

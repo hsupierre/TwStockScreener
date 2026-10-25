@@ -245,6 +245,13 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
   - 快照用欄位式緊湊格式內嵌（`lib/screener/codec.ts`），HTML 從 1.4 MB 降到 0.36 MB。
   - 靜態外殼直接放市值前 30 檔的預覽，版面跟選股器相同，表格不用等 JavaScript 就會出現，搜尋引擎也看得到。
 
+### 流量統計（Vercel Web Analytics）
+
+- root layout 掛上 `@vercel/analytics/next` 的 `<Analytics />`。不使用 cookie，所以不需要 cookie 同意視窗；隱私權政策已寫明。
+- 在 Vercel 專案的 **Analytics** 分頁按 **Enable** 才會開始收集資料。本機開發時只會把事件印在 console，不會送出。
+- 個股頁會合併成 `/stocks/[code]` 一個 route，也看得到各檔的 path。
+- Hobby 方案只有瀏覽量統計（每月 5 萬個事件）；自訂事件（例如「加入自選」的次數）要 Pro 方案。會員數改在 Supabase 查詢（見「會員功能」）。
+
 ## 每日健康檢查（`/api/cron/health`）
 
 Vercel Cron 每天台灣時間 10:17 呼叫一次（`vercel.json`），跟 GitHub Actions 完全獨立：
