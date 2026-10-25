@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { siteConfig } from "@/lib/site";
 
+import { ThemeMenu } from "./theme-menu";
+
 const NAV = [{ href: "/screener", label: "選股" }] as const;
 
 export function SiteHeader() {
@@ -20,6 +22,9 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
+        <div className="ml-auto">
+          <ThemeMenu />
+        </div>
       </div>
     </header>
   );
