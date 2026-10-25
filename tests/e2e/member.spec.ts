@@ -36,8 +36,9 @@ test.describe("已登入會員", () => {
     await page.goto("/screener?dy=4~&pe=~15");
     await page.getByRole("button", { name: "我的策略" }).click();
     await page.getByRole("menuitem", { name: "儲存目前的條件…" }).click();
-    await page.getByLabel("名稱").fill("E2E 高殖利率");
-    await page.getByRole("button", { name: "儲存", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "儲存目前的條件" });
+    await dialog.getByLabel("名稱", { exact: true }).fill("E2E 高殖利率");
+    await dialog.getByRole("button", { name: "儲存", exact: true }).click();
     await expect(page.getByText("已儲存「E2E 高殖利率」")).toBeVisible();
 
     await page.goto("/strategies");
