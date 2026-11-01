@@ -526,6 +526,28 @@ export type Database = {
           trade_value: number | null
           volume: number | null
         }
+        Insert: {
+          change?: number | null
+          close?: number | null
+          code?: string | null
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          trade_date?: string | null
+          trade_value?: never
+          volume?: never
+        }
+        Update: {
+          change?: number | null
+          close?: number | null
+          code?: string | null
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          trade_date?: string | null
+          trade_value?: never
+          volume?: never
+        }
         Relationships: [
           {
             foreignKeyName: "daily_valuation_code_fkey"

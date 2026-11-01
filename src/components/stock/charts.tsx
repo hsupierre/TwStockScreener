@@ -120,7 +120,6 @@ export function EpsChart({ data }: { data: readonly QuarterSummary[] }) {
 const TREND_COLOR = { up: "var(--up)", down: "var(--down)", flat: "var(--muted-foreground)" } as const;
 
 const candleConfig = {
-  range: { label: "K 線", color: "var(--foreground)" },
   ma5: { label: "5 日均線", color: "var(--chart-1)" },
   ma20: { label: "20 日均線", color: "var(--chart-3)" },
   ma60: { label: "60 日均線", color: "var(--chart-4)" },
@@ -209,6 +208,30 @@ function CandleTooltip({ active, payload }: { active?: boolean; payload?: { payl
   );
 }
 
+/**
+ * 均線圖例（固定 5／20／60 的順序）。Recharts 內建圖例的順序不固定，也會把 K 棒列進去；
+ * 資料還不夠畫出一段線時（例如剛開始累積的 60 日均線）加註說明。
+ */
+function MaLegend({ candles }: { candles: readonly Candle[] }) {
+  return (
+    <ul className="flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {MA_PERIODS.map((n) => {
+        const points = candles.filter((c) => c[`ma${n}`] !== null).length;
+        return (
+          <li key={n} className="flex items-center gap-1.5">
+            <span
+              className="h-0.5 w-4 rounded"
+              style={{ background: candleConfig[`ma${n}`].color }}
+              aria-hidden
+            />
+            {n} 日均線{points < 2 && "（資料累積中）"}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** 日 K 線（紅漲綠跌）＋5／20／60 日均線，下方是成交量；兩張圖以 syncId 連動提示框。 */
 export function CandleChart({ data }: { data: readonly Candle[] }) {
   const candles = [...data];
@@ -218,6 +241,7 @@ export function CandleChart({ data }: { data: readonly Candle[] }) {
       role="img"
       aria-label={`近 ${candles.length} 個交易日的日 K 線與成交量`}
     >
+      <MaLegend candles={candles} />
       <ChartContainer config={candleConfig} className="aspect-auto h-72 w-full">
         <ComposedChart data={candles} syncId="daily" margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
           <CartesianGrid vertical={false} />
@@ -230,7 +254,6 @@ export function CandleChart({ data }: { data: readonly Candle[] }) {
             tickFormatter={(v: number) => formatNumber(v, priceDigits(v))}
           />
           <ChartTooltip cursor={{ stroke: "var(--border)" }} content={<CandleTooltip />} />
-          <ChartLegend content={<ChartLegendContent />} />
           <Bar
             dataKey="range"
             isAnimationActive={false}
