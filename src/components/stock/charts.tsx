@@ -120,9 +120,9 @@ export function EpsChart({ data }: { data: readonly QuarterSummary[] }) {
 const TREND_COLOR = { up: "var(--up)", down: "var(--down)", flat: "var(--muted-foreground)" } as const;
 
 const candleConfig = {
-  ma5: { label: "5 日均線", color: "var(--chart-1)" },
-  ma20: { label: "20 日均線", color: "var(--chart-3)" },
-  ma60: { label: "60 日均線", color: "var(--chart-4)" },
+  ma5: { label: "5 日均線", color: "var(--ma5)" },
+  ma20: { label: "20 日均線", color: "var(--ma20)" },
+  ma60: { label: "60 日均線", color: "var(--ma60)" },
 } satisfies ChartConfig;
 
 const volumeConfig = {
@@ -168,7 +168,8 @@ function CandleShape({ x, y, width, height, payload: c }: CandleShapeProps) {
   );
 }
 
-const EX_COLOR = "var(--chart-3)";
+// 中性色（亮色模式黑底、暗色模式白底），避免跟紅綠 K 棒或任何一條均線撞色
+const EX_COLOR = "var(--foreground)";
 
 /** 除權息日標記（K 棒上方的小標籤：息／權／權息）。 */
 function ExBadge({ cx, bottom, kind }: { cx: number; bottom: number; kind: string }) {
