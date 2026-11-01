@@ -42,9 +42,12 @@ async function signInCookies(email: string, password: string) {
 
 export const test = base.extend<{ member: TestMember }>({
   // 參數名稱不用 `use`：會被 React hooks 的 lint 規則誤判
-  member: async ({ context, baseURL }, provide) => {
-    if (!serviceKey) throw new Error("會員 E2E 需要 .env.local 的 SUPABASE_SERVICE_ROLE_KEY");
-    const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  member: async ({ context, baseURL }, provide, testInfo) => {
+    // 本機放在 .env.local；CI 由 GitHub Secret 提供。fork 送來的 PR 拿不到 secret，略過而不是失敗
+    testInfo.skip(!serviceKey, "沒有 SUPABASE_SERVICE_ROLE_KEY，略過需要登入的會員測試");
+    const admin = createClient(url, serviceKey!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
     const email = `e2e-${randomUUID()}@example.com`;
     const password = randomUUID();
     const { data, error } = await admin.auth.admin.createUser({
