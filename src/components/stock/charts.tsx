@@ -171,6 +171,8 @@ function CandleTooltip({ active, payload }: { active?: boolean; payload?: { payl
   const c = payload?.[0]?.payload;
   if (!active || !c) return null;
   const d = priceDigits(c.close);
+  // K 棒顏色看「收盤 vs 開盤」（紅 K／綠 K）；收盤價、漲跌的顏色則看「收盤 vs 前一天的參考價」
+  const changeColor = TREND_COLOR[!c.change ? "flat" : c.change > 0 ? "up" : "down"];
   const rows: [string, string][] = [
     ["開盤", formatNumber(c.open, d)],
     ["最高", formatNumber(c.high, d)],
@@ -188,7 +190,7 @@ function CandleTooltip({ active, payload }: { active?: boolean; payload?: { payl
             <dt className="text-muted-foreground">{k}</dt>
             <dd
               className="text-right"
-              style={k === "收盤" || k === "漲跌" ? { color: TREND_COLOR[c.trend] } : undefined}
+              style={k === "收盤" || k === "漲跌" ? { color: changeColor } : undefined}
             >
               {v}
             </dd>
