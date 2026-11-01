@@ -176,6 +176,25 @@ describe("日 K 線圖 daily_prices（會員限定）", () => {
     expect(data!.volume).toBe(expected);
   });
 
+  it("除權息：匿名讀不到；會員看得到，除權息日的漲跌以參考價計算", async () => {
+    expect((await anon.from("ex_rights").select("code").limit(1)).error?.code).toBe("42501");
+    // 興富發 2026-09-23 除息 4 元：參考價 41.45、收盤 39.55 → 漲跌 -1.90（交易所行情填 0）
+    const { data, error } = await a.db
+      .from("daily_prices")
+      .select("close, change, ex_kind, ex_value, ex_reference_price")
+      .eq("code", "2542")
+      .eq("trade_date", "2026-09-23")
+      .single();
+    expect(error).toBeNull();
+    expect(data).toEqual({
+      close: 39.55,
+      change: -1.9,
+      ex_kind: "息",
+      ex_value: 4,
+      ex_reference_price: 41.45,
+    });
+  });
+
   it("會員不能寫入每日行情", async () => {
     const { error } = await a.db
       .from("daily_valuation")

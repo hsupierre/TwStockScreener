@@ -282,3 +282,78 @@ def fetch_tpex_quotes_on(f: Fetcher, day: date) -> Partial:
 
 def fetch_tpex_valuations(f: Fetcher) -> Partial:
     return parse_tpex_valuations(f.get_json(f"{TPEX_WEB}/peQryDate", params={"response": "json"}))
+
+
+# ── 除權息（上市 TWT49U、上櫃 exDailyQ）────────────────────
+# 交易所公布的收盤行情在除權息日把漲跌填 0（上市）或文字（上櫃），
+# 正確的漲跌是「收盤 − 除權息參考價」，所以另外抓除權除息計算結果表。
+
+EX_KINDS = {"權": "權", "息": "息", "權息": "權息", "除權": "權", "除息": "息", "除權息": "權息"}
+
+
+def _ex_row(code: Any, day: date | None, kind: Any, prev_close: Any, reference: Any, value: Any, cash: Any = None):
+    code = str(code or "").strip()
+    ref = positive_or_none(reference)
+    kind = EX_KINDS.get(str(kind or "").strip())
+    if not is_common_stock(code) or day is None or kind is None or ref is None:
+        return None
+    return {
+        "code": code,
+        "trade_date": day,
+        "kind": kind,
+        "prev_close": positive_or_none(prev_close),
+        "reference_price": ref,
+        "value": to_float(value),
+        "cash_dividend": to_float(cash),
+    }
+
+
+def parse_twse_ex_rights(data: dict[str, Any]) -> list[dict[str, Any]]:
+    stat = str(data.get("stat", ""))
+    if "沒有符合條件" in stat:
+        return []  # 這段期間沒有除權息
+    if stat.upper() != "OK":
+        raise ValueError(f"證交所除權息表異常：stat={stat!r}")
+    idx = _index(data["fields"])
+    rows = (
+        _ex_row(
+            _get(r, idx, "股票代號"),
+            roc_date(_get(r, idx, "資料日期")),
+            _get(r, idx, "權/息"),
+            _get(r, idx, "除權息前收盤價"),
+            _get(r, idx, "除權息參考價"),
+            _get(r, idx, "權值+息值"),
+        )
+        for r in data.get("data") or []
+    )
+    return [r for r in rows if r]
+
+
+def parse_tpex_ex_rights(data: dict[str, Any]) -> list[dict[str, Any]]:
+    tables = data.get("tables") or []
+    if not tables or "fields" not in tables[0]:
+        raise ValueError(f"櫃買除權息表異常：{str(data)[:120]}")
+    idx = _index(tables[0]["fields"])
+    rows = (
+        _ex_row(
+            _get(r, idx, "代號"),
+            roc_date(_get(r, idx, "除權息日期")),
+            _get(r, idx, "權/息"),
+            _get(r, idx, "除權息前收盤價"),
+            _get(r, idx, "除權息參考價"),
+            _get(r, idx, "權值+息值"),
+            _get(r, idx, "息值"),
+        )
+        for r in tables[0].get("data") or []
+    )
+    return [r for r in rows if r]
+
+
+def fetch_twse_ex_rights(f: Fetcher, start: date, end: date) -> list[dict[str, Any]]:
+    params = {"startDate": start.strftime("%Y%m%d"), "endDate": end.strftime("%Y%m%d"), "response": "json"}
+    return parse_twse_ex_rights(f.get_json("https://www.twse.com.tw/rwd/zh/exRight/TWT49U", params=params))
+
+
+def fetch_tpex_ex_rights(f: Fetcher, start: date, end: date) -> list[dict[str, Any]]:
+    params = {"startDate": start.strftime("%Y/%m/%d"), "endDate": end.strftime("%Y/%m/%d"), "response": "json"}
+    return parse_tpex_ex_rights(f.get_json("https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ", params=params))

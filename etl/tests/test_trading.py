@@ -115,6 +115,14 @@ def test_load_price_history_skips_weekends_and_holidays(monkeypatch):
     monkeypatch.setattr(
         jobs, "BLOCK_TRADES", lambda f, day: Partial("twse", "block", "official", trade_date=day, rows={})
     )
+    ex_ranges: list[tuple[date, date]] = []
+
+    def fake_ex(f, start, end):
+        ex_ranges.append((start, end))
+        # 1000（上市第一檔）在 10/7 除息：漲跌改用參考價計算
+        return [{"code": "1000", "trade_date": date(2026, 10, 7), "kind": "息", "reference_price": 9.5}]
+
+    monkeypatch.setattr(jobs, "EX_RIGHTS", {"twse": fake_ex, "tpex": lambda f, s, e: []})
     codes = [{"code": f"{1000 + i}"} for i in range(1000)] + [{"code": f"{5000 + i}"} for i in range(800)]
     db = FakeDb({"companies": codes})
 
@@ -137,3 +145,10 @@ def test_load_price_history_skips_weekends_and_holidays(monkeypatch):
     assert date(2026, 10, 9) not in written_days
     assert run.details["trading_days"] == 4
     assert run.as_of == "2026-10-12"
+
+    # 除權息表一次查整段期間；除權息日的漲跌 = 收盤 10.0 − 參考價 9.5
+    assert ex_ranges == [(date(2026, 10, 6), date(2026, 10, 13))]
+    valuations = [r for t, rows in db.upserts if t == "daily_valuation" for r in rows]
+    ex_day = next(r for r in valuations if r["code"] == "1000" and r["trade_date"] == date(2026, 10, 7))
+    assert ex_day["change"] == 0.5
+    assert [r["code"] for t, rows in db.upserts if t == "ex_rights" for r in rows] == ["1000"]

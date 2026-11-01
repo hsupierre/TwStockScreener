@@ -163,7 +163,43 @@ function CandleShape({ x, y, width, height, payload: c }: CandleShapeProps) {
         fill={color}
         stroke={color}
       />
+      {c.ex && <ExBadge cx={cx} bottom={y - 4} kind={c.ex.kind} />}
     </g>
+  );
+}
+
+const EX_COLOR = "var(--chart-3)";
+
+/** 除權息日標記（K 棒上方的小標籤：息／權／權息）。 */
+function ExBadge({ cx, bottom, kind }: { cx: number; bottom: number; kind: string }) {
+  const w = kind.length * 11 + 6;
+  return (
+    <g aria-hidden>
+      <rect x={cx - w / 2} y={bottom - 14} width={w} height={14} rx={3} fill={EX_COLOR} />
+      <text
+        x={cx}
+        y={bottom - 3.5}
+        textAnchor="middle"
+        fontSize={10}
+        fontWeight={600}
+        fill="var(--background)"
+      >
+        {kind}
+      </text>
+    </g>
+  );
+}
+
+const EX_NAMES: Record<string, string> = { 息: "除息", 權: "除權", 權息: "除權息" };
+
+/** 提示框裡的除權息說明，例如「除息：每股 4.00 元，參考價 41.45」。 */
+function ExNote({ ex, digits }: { ex: NonNullable<Candle["ex"]>; digits: number }) {
+  const value = ex.value === null ? "" : `每股 ${formatNumber(ex.value, 2)} 元`;
+  const ref = ex.referencePrice === null ? "" : `參考價 ${formatNumber(ex.referencePrice, digits)}`;
+  return (
+    <p className="max-w-52 font-medium" style={{ color: EX_COLOR }}>
+      {EX_NAMES[ex.kind] ?? ex.kind}日：{[value, ref].filter(Boolean).join("，")}
+    </p>
   );
 }
 
@@ -184,6 +220,7 @@ function CandleTooltip({ active, payload }: { active?: boolean; payload?: { payl
   return (
     <div className="tabular grid min-w-36 gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <p className="font-medium">{c.date}</p>
+      {c.ex && <ExNote ex={c.ex} digits={d} />}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3">
         {rows.map(([k, v]) => (
           <div key={k} className="contents">
@@ -230,6 +267,18 @@ function MaLegend({ candles }: { candles: readonly Candle[] }) {
           </li>
         );
       })}
+      {candles.some((c) => c.ex) && (
+        <li className="flex items-center gap-1.5">
+          <span
+            className="rounded-sm px-1 text-[10px] leading-4 font-semibold text-background"
+            style={{ background: EX_COLOR }}
+            aria-hidden
+          >
+            息
+          </span>
+          除權息日（價格未還原，會有缺口）
+        </li>
+      )}
     </ul>
   );
 }
@@ -245,7 +294,8 @@ export function CandleChart({ data }: { data: readonly Candle[] }) {
     >
       <MaLegend candles={candles} />
       <ChartContainer config={candleConfig} className="aspect-auto h-72 w-full">
-        <ComposedChart data={candles} syncId="daily" margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+        {/* 上方多留空間給除權息標記 */}
+        <ComposedChart data={candles} syncId="daily" margin={{ top: 22, right: 4, left: 4, bottom: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" hide />
           <YAxis

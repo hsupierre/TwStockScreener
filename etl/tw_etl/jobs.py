@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
-from .http import Fetcher
+from .http import Fetcher, FetchError
 from .load.supabase import Supabase, in_filter
 from .runs import Run, track_run
 from .sources import finmind, mops, official, openapi, quotes
@@ -72,6 +72,22 @@ DAILY_SOURCES: dict[tuple[str, quotes.Kind], list[tuple[quotes.Source, Callable[
 ODD_LOTS: Callable[[Fetcher, date | None], quotes.Partial] = official.fetch_twse_odd
 # 上市鉅額交易（證交所成交股數含鉅額；一般看盤軟體的成交量不含）
 BLOCK_TRADES: Callable[[Fetcher, date | None], quotes.Partial] = official.fetch_twse_block
+# 除權息計算結果表（起訖日期）：用參考價修正除權息日的漲跌，並記錄在 ex_rights（K 線圖標示）
+EX_RIGHTS: dict[str, Callable[[Fetcher, date, date], list[dict[str, Any]]]] = {
+    "twse": official.fetch_twse_ex_rights,
+    "tpex": official.fetch_tpex_ex_rights,
+}
+
+
+def fetch_ex_rights(ctx: Context, market: str, start: date, end: date) -> list[dict[str, Any]] | None:
+    """失敗時回傳 None（只影響除權息日的漲跌，不中斷整個工作）。"""
+    try:
+        return EX_RIGHTS[market](ctx.fetcher, start, end)
+    except (FetchError, ValueError, KeyError, IndexError, TypeError) as e:
+        log.warning("%s 除權息表失敗：%s", market, e)
+        return None
+
+
 # FinMind 免費額度有限，降級模式只補市值最大的這些股票
 FINMIND_MAX_STOCKS = 300
 
@@ -130,9 +146,14 @@ def run_daily(ctx: Context, *, snapshot: bool = True) -> None:
 
         known = {c["code"] for c in companies}
         daily: list[dict[str, Any]] = []
+        ex_rows: list[dict[str, Any]] = []
         for market in MARKETS:
             quote, valuation, report = collect_market_daily(ctx.fetcher, market)
             run.details[market] = report
+            if quote is not None and quote.trade_date is not None:
+                ex = fetch_ex_rights(ctx, market, quote.trade_date, quote.trade_date)
+                report["ex_rights"] = "失敗" if ex is None else quotes.apply_ex_rights(quote, ex)
+                ex_rows.extend(ex or [])
             if quote is None:
                 log.error("%s 行情：官網與 OpenAPI 都不可用，改用 FinMind 降級模式", market)
                 filled = finmind_degraded(ctx, market, known)
@@ -151,6 +172,8 @@ def run_daily(ctx: Context, *, snapshot: bool = True) -> None:
             raise SanityError("上市、上櫃行情都無法取得（官網、OpenAPI、FinMind 皆失敗）")
         run.rows_written += ctx.write("daily_valuation", daily, "code,trade_date")
         run.details["daily_valuation"] = len(daily)
+        if ex_rows:
+            run.rows_written += ctx.write("ex_rights", _only_known(ex_rows, known), "code,trade_date")
         run.as_of = max(r["trade_date"] for r in daily).isoformat() if daily else None
 
         if not ctx.dry_run:
@@ -360,6 +383,13 @@ def load_price_history(ctx: Context, run: Run, days: int) -> None:
     for host in ("www.twse.com.tw", "www.tpex.org.tw"):
         ctx.fetcher.set_min_interval(host, 2.0)  # 回補時放慢，對官網比較禮貌
     known = _known_codes(ctx)
+    # 除權息表可以一次查整段期間
+    start, end = ctx.today - timedelta(days=days), ctx.today
+    ex_by_market = {m: fetch_ex_rights(ctx, m, start, end) or [] for m in MARKETS}
+    ex_rows = [r for rows in ex_by_market.values() for r in rows]
+    if ex_rows:
+        run.rows_written += ctx.write("ex_rights", _only_known(ex_rows, known), "code,trade_date")
+    run.details["ex_rights"] = {m: len(rows) for m, rows in ex_by_market.items()}
     trading_days: list[str] = []
     for offset in range(days, 0, -1):
         day = ctx.today - timedelta(days=offset)
@@ -371,6 +401,7 @@ def load_price_history(ctx: Context, run: Run, days: int) -> None:
             if part.error or len(part.rows) < quotes.MIN_ROWS[market]:
                 log.info("%s %s 略過（%s）", day, market, part.error or f"只有 {len(part.rows)} 筆")
                 continue
+            quotes.apply_ex_rights(part, ex_by_market[market])
             adjustments: list[quotes.Partial] = []
             if market == "twse":
                 for kind, fn in (("odd", ODD_LOTS), ("block", BLOCK_TRADES)):

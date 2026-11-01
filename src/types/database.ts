@@ -210,6 +210,47 @@ export type Database = {
         }
         Relationships: []
       }
+      ex_rights: {
+        Row: {
+          cash_dividend: number | null
+          code: string
+          kind: string
+          prev_close: number | null
+          reference_price: number
+          trade_date: string
+          updated_at: string
+          value: number | null
+        }
+        Insert: {
+          cash_dividend?: number | null
+          code: string
+          kind: string
+          prev_close?: number | null
+          reference_price: number
+          trade_date: string
+          updated_at?: string
+          value?: number | null
+        }
+        Update: {
+          cash_dividend?: number | null
+          code?: string
+          kind?: string
+          prev_close?: number | null
+          reference_price?: number
+          trade_date?: string
+          updated_at?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ex_rights_code_fkey"
+            columns: ["code"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
       financials_quarterly: {
         Row: {
           book_value_per_share: number | null
@@ -519,6 +560,9 @@ export type Database = {
           change: number | null
           close: number | null
           code: string | null
+          ex_kind: string | null
+          ex_reference_price: number | null
+          ex_value: number | null
           high: number | null
           low: number | null
           open: number | null
@@ -530,6 +574,9 @@ export type Database = {
           change?: number | null
           close?: number | null
           code?: string | null
+          ex_kind?: string | null
+          ex_reference_price?: number | null
+          ex_value?: number | null
           high?: number | null
           low?: number | null
           open?: number | null
@@ -541,6 +588,9 @@ export type Database = {
           change?: number | null
           close?: number | null
           code?: string | null
+          ex_kind?: string | null
+          ex_reference_price?: number | null
+          ex_value?: number | null
           high?: number | null
           low?: number | null
           open?: number | null

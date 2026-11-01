@@ -39,7 +39,7 @@ export function DailyChart({ code }: { code: string }) {
     let cancelled = false;
     void createSupabaseBrowserClient()
       .from("daily_prices")
-      .select("trade_date, open, high, low, close, change, volume")
+      .select("trade_date, open, high, low, close, change, volume, ex_kind, ex_value, ex_reference_price")
       .eq("code", code)
       .order("trade_date", { ascending: false })
       .limit(FETCH_DAYS)

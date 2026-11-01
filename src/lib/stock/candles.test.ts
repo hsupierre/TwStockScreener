@@ -56,6 +56,20 @@ describe("toCandles", () => {
     expect(c).toMatchObject({ open: 100, high: 100, low: 100, range: [100, 100], trend: "flat" });
   });
 
+  it("帶出除權息資訊", () => {
+    const [normal, ex] = toCandles([
+      row("2026-09-22", 46.8, 46.8, 45.4, 45.45),
+      row("2026-09-23", 40, 40.45, 39, 39.55, {
+        change: -1.9,
+        ex_kind: "息",
+        ex_value: 4,
+        ex_reference_price: 41.45,
+      }),
+    ]);
+    expect(normal!.ex).toBeNull();
+    expect(ex!.ex).toEqual({ kind: "息", value: 4, referencePrice: 41.45 });
+  });
+
   it("開盤等於收盤時，依漲跌決定顏色", () => {
     const [up, down] = toCandles([
       row("2026-10-01", 50, 51, 49, 50, { change: 0.5 }),

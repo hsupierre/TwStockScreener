@@ -9,6 +9,18 @@ export interface PriceRow {
   change: number | null;
   /** 股數，已扣除零股與鉅額交易（daily_prices view） */
   volume: number | null;
+  /** 除權息日才有：權、息、權息 */
+  ex_kind?: string | null;
+  /** 權值＋息值（元） */
+  ex_value?: number | null;
+  ex_reference_price?: number | null;
+}
+
+/** 除權息日：價格會依權息值向下調整，K 線因此出現缺口（未還原權值）。 */
+export interface ExRights {
+  kind: string;
+  value: number | null;
+  referencePrice: number | null;
 }
 
 export type Trend = "up" | "down" | "flat";
@@ -31,6 +43,7 @@ export interface Candle {
   ma5: number | null;
   ma20: number | null;
   ma60: number | null;
+  ex: ExRights | null;
 }
 
 export const MA_PERIODS = [5, 20, 60] as const;
@@ -85,6 +98,9 @@ export function toCandles(rows: readonly PriceRow[]): Candle[] {
       ma5: mas[5]![i]!,
       ma20: mas[20]![i]!,
       ma60: mas[60]![i]!,
+      ex: r.ex_kind
+        ? { kind: r.ex_kind, value: r.ex_value ?? null, referencePrice: r.ex_reference_price ?? null }
+        : null,
     };
   });
 }

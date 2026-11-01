@@ -292,6 +292,8 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://tw-stock-screener-fawn.ver
   - 頁面本身維持靜態；登入後才在瀏覽器端讀取 `daily_prices`（`src/components/stock/daily-chart.tsx`）。
   - 資料庫只開放 `daily_valuation`、`daily_prices` 給登入會員（RLS），未登入時用 API 也讀不到。
   - 開高低從 2026-11 開始收集，之前的資料用 `backfill --steps prices --price-days 92` 回補約 3 個月。
+  - **除權息日**：K 棒上方標示「息／權／權息」，提示框顯示權息值與參考價。K 線用的是未還原的成交價，所以除權息日會有缺口。
+- **除權息日的漲跌**：證交所在除權息日把漲跌填 0（符號 X），櫃買中心填文字。ETL 另外抓除權除息計算結果表（上市 `TWT49U`、上櫃 `bulletin/exDailyQ`，都可以查日期區間），把漲跌改成「收盤 − 除權息參考價」，快照的漲跌幅也跟著正確。抓取失敗只記錄警告，不影響其他資料。
 
 ## 會員功能（P6）
 
@@ -334,7 +336,8 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 |---|---|---|
 | `companies` | 公司基本資料、市場別、產業、財報格式 | 公開唯讀 |
 | `daily_valuation` | 每日開高低收、成交量、本益比、殖利率、股價淨值比 | 只有登入會員能讀 |
-| `daily_prices`（view） | 日 K 線圖用，成交量已扣零股與鉅額 | 只有登入會員能讀 |
+| `daily_prices`（view） | 日 K 線圖用，成交量已扣零股與鉅額，附除權息欄位 | 只有登入會員能讀 |
+| `ex_rights` | 除權息計算結果（類別、前一日收盤、參考價、權息值） | 只有登入會員能讀 |
 | `monthly_revenue` | 月營收、月增率、年增率、累計 | 公開唯讀 |
 | `financials_quarterly` | 季報（損益與現金流為單季值、資產負債為期末值） | 公開唯讀 |
 | `dividends` | 股利分派 | 公開唯讀 |

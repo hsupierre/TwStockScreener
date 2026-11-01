@@ -116,3 +116,16 @@ def merge_daily(
             for name in ADJUSTMENT_FIELDS[adj.kind]:
                 row[name] = values.get(name, 0)
     return list(rows.values())
+
+
+def apply_ex_rights(quotes: Partial, ex_rows: Iterable[dict[str, Any]]) -> int:
+    """除權息日的漲跌改成「收盤 − 除權息參考價」（交易所行情在這天填 0 或文字）；回傳修正筆數。"""
+    if quotes.trade_date is None:
+        return 0
+    fixed = 0
+    for x in ex_rows:
+        row = quotes.rows.get(x["code"]) if x["trade_date"] == quotes.trade_date else None
+        if row and row.get("close") is not None:
+            row["change"] = round(row["close"] - x["reference_price"], 2)
+            fixed += 1
+    return fixed
