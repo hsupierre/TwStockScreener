@@ -149,6 +149,43 @@ describe("我的策略 saved_screens", () => {
   });
 });
 
+describe("日 K 線圖 daily_prices（會員限定）", () => {
+  it("匿名讀不到每日行情（daily_valuation 與 daily_prices）", async () => {
+    expect((await anon.from("daily_valuation").select("code").limit(1)).error?.code).toBe("42501");
+    expect((await anon.from("daily_prices").select("code").limit(1)).error?.code).toBe("42501");
+  });
+
+  it("會員讀得到；成交量與快照一樣扣除零股與鉅額交易", async () => {
+    const { data, error } = await a.db
+      .from("daily_prices")
+      .select("trade_date, open, high, low, close, volume, trade_value")
+      .eq("code", CODE_1)
+      .order("trade_date", { ascending: false })
+      .limit(1)
+      .single();
+    expect(error).toBeNull();
+    expect(data!.close).not.toBeNull();
+
+    const { data: raw } = await admin
+      .from("daily_valuation")
+      .select("volume, odd_volume, block_volume")
+      .eq("code", CODE_1)
+      .eq("trade_date", data!.trade_date!)
+      .single();
+    const expected = Math.max(raw!.volume! - (raw!.odd_volume ?? 0) - (raw!.block_volume ?? 0), 0);
+    expect(data!.volume).toBe(expected);
+  });
+
+  it("會員不能寫入每日行情", async () => {
+    const { error } = await a.db
+      .from("daily_valuation")
+      .update({ close: 1 })
+      .eq("code", CODE_1)
+      .eq("trade_date", "2026-10-30");
+    expect(error?.code).toBe("42501");
+  });
+});
+
 describe("刪除帳號 delete_my_account()", () => {
   it("匿名不能呼叫", async () => {
     const { error } = await anon.rpc("delete_my_account");

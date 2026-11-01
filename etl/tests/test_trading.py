@@ -44,7 +44,16 @@ def test_parse_twse_mi_index_combines_sign_and_magnitude():
     }
     p = parse_twse_mi_index(data)
     assert p.trade_date == date(2026, 9, 15)
-    assert p.rows["2330"] == {"close": 2385.0, "change": 5.0, "volume": 15215752, "trade_value": 100000}
+    # mi_row 的開高低收都用同一個價格
+    assert p.rows["2330"] == {
+        "open": 2385.0,
+        "high": 2385.0,
+        "low": 2385.0,
+        "close": 2385.0,
+        "change": 5.0,
+        "volume": 15215752,
+        "trade_value": 100000,
+    }
     assert p.rows["1101"]["change"] == -0.5
     assert p.rows["2881"]["change"] == 0.0
     assert "00878" not in p.rows

@@ -19,3 +19,8 @@ export const EpsChart = dynamic(() => import("./charts").then((m) => m.EpsChart)
   ssr: false,
   loading: () => <ChartPlaceholder height="h-64" />,
 });
+
+export const CandleChart = dynamic(() => import("./charts").then((m) => m.CandleChart), {
+  ssr: false,
+  loading: () => <ChartPlaceholder height="h-[25rem]" />,
+});

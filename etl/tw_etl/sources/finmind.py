@@ -48,6 +48,9 @@ def latest_price(f: Fetcher, code: str, since: date, token: str | None) -> dict[
     return {
         "code": code,
         "trade_date": date.fromisoformat(last["date"]),
+        "open": positive_or_none(last.get("open")),
+        "high": positive_or_none(last.get("max")),
+        "low": positive_or_none(last.get("min")),
         "close": positive_or_none(last.get("close")),
         "change": to_float(last.get("spread")),
         "volume": to_int(last.get("Trading_Volume")),

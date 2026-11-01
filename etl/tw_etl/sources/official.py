@@ -53,6 +53,9 @@ def parse_twse_quotes(text: str) -> Partial:
             _get(r, idx, "證券代號"),
             roc_date(_get(r, idx, "日期")),
             {
+                "open": positive_or_none(_get(r, idx, "開盤價")),
+                "high": positive_or_none(_get(r, idx, "最高價")),
+                "low": positive_or_none(_get(r, idx, "最低價")),
                 "close": positive_or_none(_get(r, idx, "收盤價")),
                 "change": to_float(_get(r, idx, "漲跌價差")),
                 "volume": to_int(_get(r, idx, "成交股數")),
@@ -111,6 +114,9 @@ def parse_twse_mi_index(data: dict[str, Any]) -> Partial:
                 str(_get(r, idx, "證券代號") or ""),
                 day,
                 {
+                    "open": positive_or_none(_get(r, idx, "開盤價")),
+                    "high": positive_or_none(_get(r, idx, "最高價")),
+                    "low": positive_or_none(_get(r, idx, "最低價")),
                     "close": positive_or_none(_get(r, idx, "收盤價")),
                     "change": None if magnitude is None else _sign(_get(r, idx, "漲跌(+/-)")) * magnitude,
                     "volume": to_int(_get(r, idx, "成交股數")),
@@ -232,6 +238,9 @@ def parse_tpex_quotes(data: dict[str, Any]) -> Partial:
             str(_get(r, idx, "代號") or ""),
             day,
             {
+                "open": positive_or_none(_get(r, idx, "開盤")),
+                "high": positive_or_none(_get(r, idx, "最高")),
+                "low": positive_or_none(_get(r, idx, "最低")),
                 "close": positive_or_none(_get(r, idx, "收盤")),
                 "change": to_float(_get(r, idx, "漲跌")),
                 "volume": to_int(_get(r, idx, "成交股數")),

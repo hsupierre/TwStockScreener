@@ -20,9 +20,9 @@ const admin = createClient<Database>(url, serviceKey, opts);
 // 測試專用代號，不會與真實股票衝突
 const TEST_CODE = "ZZTEST";
 
+// daily_valuation 從 2026-11（日 K 線圖）起只開放給登入會員，見 members.test.ts
 const PUBLIC_TABLES = [
   "companies",
-  "daily_valuation",
   "monthly_revenue",
   "financials_quarterly",
   "dividends",

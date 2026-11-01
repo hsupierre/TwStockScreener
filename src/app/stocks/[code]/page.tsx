@@ -3,6 +3,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DailyChart } from "@/components/stock/daily-chart";
 import { EpsChart, RevenueChart } from "@/components/stock/lazy-charts";
 import { DividendTable, QuarterlyTable } from "@/components/stock/financial-tables";
 import { WatchButton } from "@/components/member/watch-button";
@@ -166,6 +167,10 @@ export default async function StockPage({ params }: PageProps<"/stocks/[code]">)
           </div>
         </div>
       </header>
+
+      <Section id="daily" title="日線圖" note="會員限定；紅漲綠跌，成交量不含零股與鉅額交易">
+        <DailyChart code={code} />
+      </Section>
 
       {snapshot ? (
         <Section id="metrics" title="重點指標" note="近四季（TTM）計算；金融業不適用毛利率等指標">

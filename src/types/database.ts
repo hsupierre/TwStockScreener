@@ -64,8 +64,11 @@ export type Database = {
           close: number | null
           code: string
           dividend_yield: number | null
+          high: number | null
+          low: number | null
           odd_trade_value: number | null
           odd_volume: number | null
+          open: number | null
           pb: number | null
           pe: number | null
           source: string | null
@@ -80,8 +83,11 @@ export type Database = {
           close?: number | null
           code: string
           dividend_yield?: number | null
+          high?: number | null
+          low?: number | null
           odd_trade_value?: number | null
           odd_volume?: number | null
+          open?: number | null
           pb?: number | null
           pe?: number | null
           source?: string | null
@@ -96,8 +102,11 @@ export type Database = {
           close?: number | null
           code?: string
           dividend_yield?: number | null
+          high?: number | null
+          low?: number | null
           odd_trade_value?: number | null
           odd_volume?: number | null
+          open?: number | null
           pb?: number | null
           pe?: number | null
           source?: string | null
@@ -505,7 +514,28 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      daily_prices: {
+        Row: {
+          change: number | null
+          close: number | null
+          code: string | null
+          high: number | null
+          low: number | null
+          open: number | null
+          trade_date: string | null
+          trade_value: number | null
+          volume: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_valuation_code_fkey"
+            columns: ["code"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
     }
     Functions: {
       delete_my_account: { Args: never; Returns: undefined }

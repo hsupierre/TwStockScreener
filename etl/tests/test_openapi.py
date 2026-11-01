@@ -5,6 +5,7 @@ from tw_etl.sources.openapi import (
     map_tpex_company,
     map_twse_company,
     tpex_quotes,
+    twse_quotes,
     twse_valuations,
 )
 
@@ -53,6 +54,34 @@ def test_openapi_quotes_and_valuations_keep_latest_day_and_common_stocks():
     )
     assert (q.market, q.kind, q.source, q.trade_date) == ("tpex", "quotes", "openapi", date(2026, 10, 20))
     assert q.rows == {"6488": {"close": 844.0, "change": -38.0}}
+
+    # 開高低（K 線圖）：上櫃 Open/High/Low、上市 OpeningPrice/HighestPrice/LowestPrice
+    q = tpex_quotes(
+        [
+            {
+                "SecuritiesCompanyCode": "6488",
+                "Date": "1151020",
+                "Open": "880",
+                "High": "885",
+                "Low": "840",
+                "Close": "844",
+            }
+        ]
+    )
+    assert q.rows["6488"] == {"open": 880.0, "high": 885.0, "low": 840.0, "close": 844.0}
+    t = twse_quotes(
+        [
+            {
+                "Code": "2330",
+                "Date": "1151020",
+                "OpeningPrice": "2440.00",
+                "HighestPrice": "2450.00",
+                "LowestPrice": "2400.00",
+                "ClosingPrice": "2420.00",
+            }
+        ]
+    )
+    assert t.rows["2330"] == {"open": 2440.0, "high": 2450.0, "low": 2400.0, "close": 2420.0}
 
     v = twse_valuations(
         [{"Code": "2330", "Date": "1151019", "PEratio": "28.05", "DividendYield": "0.91", "PBratio": "0"}]

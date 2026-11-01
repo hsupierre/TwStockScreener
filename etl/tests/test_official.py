@@ -22,7 +22,15 @@ TWSE_CSV = (
 def test_twse_quotes_csv():
     p = parse_twse_quotes(TWSE_CSV)
     assert (p.market, p.kind, p.source, p.trade_date) == ("twse", "quotes", "official", date(2026, 10, 22))
-    assert p.rows["2330"] == {"close": 2385.0, "change": -35.0, "volume": 29796590, "trade_value": 71536783195}
+    assert p.rows["2330"] == {
+        "open": 2435.0,
+        "high": 2435.0,
+        "low": 2385.0,
+        "close": 2385.0,
+        "change": -35.0,
+        "volume": 29796590,
+        "trade_value": 71536783195,
+    }
     assert "00400A" not in p.rows  # ETF
     assert p.rows["9958"] == {"change": 0.0, "volume": 100, "trade_value": 1000}  # 無收盤價
 
@@ -66,7 +74,15 @@ def test_tpex_quotes_json_with_padded_field_names():
         }
     )
     assert (p.market, p.trade_date) == ("tpex", date(2026, 10, 22))
-    assert p.rows["6488"] == {"close": 826.0, "change": -54.0, "volume": 9364000, "trade_value": 7986265000}
+    assert p.rows["6488"] == {
+        "open": 896.0,
+        "high": 898.0,
+        "low": 815.0,
+        "close": 826.0,
+        "change": -54.0,
+        "volume": 9364000,
+        "trade_value": 7986265000,
+    }
 
 
 def test_tpex_valuations_json():

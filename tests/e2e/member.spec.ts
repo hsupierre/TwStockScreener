@@ -13,6 +13,26 @@ test.describe("未登入", () => {
     await page.goto("/watchlist");
     await expect(page.getByText("登入後才能使用自選股")).toBeVisible();
   });
+
+  test("個股頁的日 K 線圖顯示登入提示", async ({ page }) => {
+    await page.goto("/stocks/2330");
+    await expect(page.getByText("日 K 線圖是會員功能")).toBeVisible();
+    await expect(page.getByRole("link", { name: "登入看 K 線圖" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fstocks%2F2330",
+    );
+  });
+});
+
+test.describe("已登入會員：日 K 線圖", () => {
+  test("顯示 K 線、均線與成交量", async ({ page, member: _ }) => {
+    await page.goto("/stocks/2330");
+    const chart = page.getByRole("img", { name: /個交易日的日 K 線與成交量/ });
+    await expect(chart).toBeVisible();
+    // 每個交易日一根 K 棒（rect）；回補 3 個月後至少 40 根
+    await expect.poll(async () => chart.locator(".recharts-bar-rectangle rect").count()).toBeGreaterThan(40);
+    await expect(chart.getByText("20 日均線")).toBeVisible();
+  });
 });
 
 test.describe("已登入會員", () => {

@@ -154,7 +154,7 @@ etl/tw_etl/
 
 | 指令（在 `etl/` 目錄） | 內容 | 排程（台灣時間） |
 |---|---|---|
-| `python -m tw_etl daily` | 公司基本資料、行情、估值，接著重算快照 | 週一至五 23:17、隔天 07:47 |
+| `python -m tw_etl daily` | 公司基本資料、行情（含開高低）、估值，接著重算快照 | 週一至五 14:03、隔天 07:47 補抓 |
 | `python -m tw_etl monthly` | 最新月營收 | 每月 1–15 日 21:23 |
 | `python -m tw_etl quarterly` | 去年與今年各季季報（MOPS） | 財報季（3、4、5、8、11 月）每天 22:33，其他月份每週日 22:33 |
 | `python -m tw_etl dividends` | 去年與今年董事會決議的股利 | 每週六 22:43 |
@@ -287,6 +287,11 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://tw-stock-screener-fawn.ver
   - OG 圖片用中文字型子集產生（約 40 KB），可被 CDN 快取一天。
 - **內容**：重點指標（與選股器使用相同的定義）、24 個月營收與年增率圖、12 季 EPS 圖與季報表（金額固定以億元顯示）、近 10 年股利、公司資料。
 - **連結**：選股結果的股票名稱連到個股頁；個股頁的「同產業選股」會帶入產業條件。
+- **日線圖（會員限定）**：
+  - 日 K 線（紅漲綠跌）、5／20／60 日均線，下方是成交量，最多顯示近 120 個交易日。
+  - 頁面本身維持靜態；登入後才在瀏覽器端讀取 `daily_prices`（`src/components/stock/daily-chart.tsx`）。
+  - 資料庫只開放 `daily_valuation`、`daily_prices` 給登入會員（RLS），未登入時用 API 也讀不到。
+  - 開高低從 2026-11 開始收集，之前的資料用 `backfill --steps prices --price-days 92` 回補約 3 個月。
 
 ## 會員功能（P6）
 
@@ -328,7 +333,8 @@ Schema 放在 `supabase/migrations/`。**不要在 Dashboard 直接改表**，�
 | 資料表 | 內容 | 權限 |
 |---|---|---|
 | `companies` | 公司基本資料、市場別、產業、財報格式 | 公開唯讀 |
-| `daily_valuation` | 每日收盤價、本益比、殖利率、股價淨值比 | 公開唯讀 |
+| `daily_valuation` | 每日開高低收、成交量、本益比、殖利率、股價淨值比 | 只有登入會員能讀 |
+| `daily_prices`（view） | 日 K 線圖用，成交量已扣零股與鉅額 | 只有登入會員能讀 |
 | `monthly_revenue` | 月營收、月增率、年增率、累計 | 公開唯讀 |
 | `financials_quarterly` | 季報（損益與現金流為單季值、資產負債為期末值） | 公開唯讀 |
 | `dividends` | 股利分派 | 公開唯讀 |

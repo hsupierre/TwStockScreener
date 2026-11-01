@@ -21,7 +21,16 @@ def test_fill_prices_uses_latest_row_and_token_header():
                 "status": 200,
                 "data": [
                     {"date": "2026-10-21", "close": 2420.0, "spread": 15.0, "Trading_Volume": 1, "Trading_money": 2},
-                    {"date": "2026-10-22", "close": 2385.0, "spread": -35.0, "Trading_Volume": 3, "Trading_money": 4},
+                    {
+                        "date": "2026-10-22",
+                        "open": 2435.0,
+                        "max": 2435.0,
+                        "min": 2385.0,
+                        "close": 2385.0,
+                        "spread": -35.0,
+                        "Trading_Volume": 3,
+                        "Trading_money": 4,
+                    },
                 ],
             },
         )
@@ -31,6 +40,9 @@ def test_fill_prices_uses_latest_row_and_token_header():
         {
             "code": "2330",
             "trade_date": date(2026, 10, 22),
+            "open": 2435.0,
+            "high": 2435.0,
+            "low": 2385.0,
             "close": 2385.0,
             "change": -35.0,
             "volume": 3,

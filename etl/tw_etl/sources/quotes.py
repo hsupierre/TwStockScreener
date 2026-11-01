@@ -27,7 +27,7 @@ PRIORITY: dict[str, int] = {"official": 0, "openapi": 1, "finmind": 2}
 # 合理的最少筆數（一般股票）：上市約 1,050、上櫃約 880 檔
 MIN_ROWS: dict[str, int] = {"twse": 900, "tpex": 700}
 
-QUOTE_FIELDS = ("close", "change", "volume", "trade_value")
+QUOTE_FIELDS = ("open", "high", "low", "close", "change", "volume", "trade_value")
 VALUATION_FIELDS = ("pe", "pb", "dividend_yield")
 
 

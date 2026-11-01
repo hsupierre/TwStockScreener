@@ -100,6 +100,9 @@ def twse_quotes(rows: list[dict[str, Any]]) -> Partial:
                 _s(r.get("Code")),
                 roc_date(r.get("Date")),
                 {
+                    "open": positive_or_none(r.get("OpeningPrice")),
+                    "high": positive_or_none(r.get("HighestPrice")),
+                    "low": positive_or_none(r.get("LowestPrice")),
                     "close": positive_or_none(r.get("ClosingPrice")),
                     "change": to_float(r.get("Change")),
                     "volume": to_int(r.get("TradeVolume")),
@@ -141,6 +144,9 @@ def tpex_quotes(rows: list[dict[str, Any]]) -> Partial:
                 _s(r.get("SecuritiesCompanyCode")),
                 roc_date(r.get("Date")),
                 {
+                    "open": positive_or_none(r.get("Open")),
+                    "high": positive_or_none(r.get("High")),
+                    "low": positive_or_none(r.get("Low")),
                     "close": positive_or_none(r.get("Close")),
                     "change": to_float(r.get("Change")),
                     "volume": to_int(r.get("TradingShares")),

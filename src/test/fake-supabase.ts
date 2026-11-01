@@ -44,11 +44,16 @@ export const fake = {
   },
 };
 
+/** 登入就能讀的資料表（沒有 user_id），對應 migration 裡只開放給 authenticated 的 view。 */
+const MEMBER_READABLE = new Set(["daily_prices"]);
+
 class Query implements PromiseLike<{ data: unknown; error: FakeError | null }> {
   private op: "select" | "insert" | "update" | "delete" = "select";
   private payload: Row | null = null;
   private filters: [string, unknown][] = [];
   private orderBy: string | null = null;
+  private descending = false;
+  private max: number | null = null;
   private returning = false;
   private one = false;
 
@@ -76,8 +81,13 @@ class Query implements PromiseLike<{ data: unknown; error: FakeError | null }> {
     this.filters.push([column, value]);
     return this;
   }
-  order(column: string) {
+  order(column: string, opts?: { ascending?: boolean }) {
     this.orderBy = column;
+    this.descending = opts?.ascending === false;
+    return this;
+  }
+  limit(n: number) {
+    this.max = n;
     return this;
   }
   single() {
@@ -94,8 +104,9 @@ class Query implements PromiseLike<{ data: unknown; error: FakeError | null }> {
     const userId = fake.session?.user.id;
     if (!userId) return { data: null, error: { message: "permission denied", code: "42501" } };
     const rows = (fake.tables[this.table] ??= []);
-    // RLS：只看得到自己的資料
-    const match = (r: Row) => r.user_id === userId && this.filters.every(([k, v]) => r[k] === v);
+    // RLS：會員資料只看得到自己的；行情（daily_prices）登入就能讀
+    const own = (r: Row) => MEMBER_READABLE.has(this.table) || r.user_id === userId;
+    const match = (r: Row) => own(r) && this.filters.every(([k, v]) => r[k] === v);
 
     let result: Row[];
     if (this.op === "insert") {
@@ -122,8 +133,10 @@ class Query implements PromiseLike<{ data: unknown; error: FakeError | null }> {
       result = rows.filter(match);
       if (this.orderBy) {
         const key = this.orderBy;
-        result = [...result].sort((a, b) => String(a[key]).localeCompare(String(b[key])));
+        const dir = this.descending ? -1 : 1;
+        result = [...result].sort((a, b) => dir * String(a[key]).localeCompare(String(b[key])));
       }
+      if (this.max !== null) result = result.slice(0, this.max);
     }
 
     if (this.op !== "select" && !this.returning) return { data: null, error: null };
