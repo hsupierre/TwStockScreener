@@ -154,7 +154,7 @@ etl/tw_etl/
 
 | 指令（在 `etl/` 目錄） | 內容 | 排程（台灣時間） |
 |---|---|---|
-| `python -m tw_etl daily` | 公司基本資料、行情（含開高低）、估值，接著重算快照 | 週一至五 14:03、隔天 07:47 補抓 |
+| `python -m tw_etl daily` | 公司基本資料、行情（含開高低）、估值，接著重算快照 | 週一至五 14:30～15:30 由 Vercel Cron 觸發（見下方），GitHub 排程 14:03、隔天 07:47 補抓當備援 |
 | `python -m tw_etl monthly` | 最新月營收 | 每月 1–15 日 21:23 |
 | `python -m tw_etl quarterly` | 去年與今年各季季報（MOPS） | 財報季（3、4、5、8、11 月）每天 22:33，其他月份每週日 22:33 |
 | `python -m tw_etl dividends` | 去年與今年董事會決議的股利 | 每週六 22:43 |
@@ -251,6 +251,14 @@ GitHub Actions（`.github/workflows/etl.yml`）需要設定以下項目：
 - 在 Vercel 專案的 **Analytics** 分頁按 **Enable** 才會開始收集資料。本機開發時只會把事件印在 console，不會送出。
 - 個股頁會合併成 `/stocks/[code]` 一個 route，也看得到各檔的 path。
 - Hobby 方案只有瀏覽量統計（每月 5 萬個事件）；自訂事件（例如「加入自選」的次數）要 Pro 方案。會員數改在 Supabase 查詢（見「會員功能」）。
+
+## 每日 ETL 觸發（`/api/cron/daily-etl`）
+
+- **為什麼不只靠 GitHub 排程**：GitHub 的 `schedule` 在負載高時會延遲好幾個小時，甚至整次略過。實測 23:17 的排程常到凌晨 4 點才跑，2026-11-02 14:03 那次則完全沒有執行。用 `workflow_dispatch` 觸發則幾乎會立刻開始。
+- **做法**：Vercel Cron 在週一至五 UTC 06:30 呼叫這個路由。Hobby 方案的 Cron 會在指定的那個小時內執行，所以實際時間是台灣時間 14:30～15:30。路由會用 `GITHUB_ACTIONS_TOKEN` 觸發 `etl.yml` 的 daily。
+- **不重複執行**：`data_freshness` 的 daily 已經是今天（台灣時間）的資料時，就略過不觸發。
+- **權限**：跟健康檢查共用 `CRON_SECRET`、`GITHUB_ACTIONS_TOKEN`，也會順便檢查 workflow 是否被停用，被停用時先重新啟用。
+- **資料時間**：這個時段盤後零股、鉅額交易可能還沒結束，成交量會先略為偏高，隔天 07:47 的補抓會以完整資料覆蓋。
 
 ## 每日健康檢查（`/api/cron/health`）
 
